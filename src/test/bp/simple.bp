@@ -1,0 +1,22 @@
+decl g1, g2, g3;
+
+bool p ( ) begin
+   skip;
+   m0: p();
+   return T;
+end
+
+void main ( ) begin
+   decl l1, l2, l3;
+
+   while (*) do
+     l1 := l1 | l2;
+   od
+
+   p();
+
+   if (g1 = T) then
+     SLIC_ERROR: skip;
+   else skip;
+  fi
+end

@@ -1,0 +1,44 @@
+decl a, b;
+
+void q ( x ) begin
+   decl a, b, cd;
+   enforce FUCK;
+   skip;
+end
+
+void ppp ( x, y ) begin
+    skip; skip;
+    skip;
+
+	l4: skip;
+
+	/* comment */
+
+	l5: l6: skip;
+
+	goto l4;
+	goto l4, l5;
+
+	if ( ? ) then 
+	  goto l4;
+	  l: x := b & a | c;
+	  
+    else 
+	  while ( ? ) do 
+        assume (a & b = F);
+		assert ( (a | b) & (c | d) );
+		assert ( * );
+		l: ppp ( x, y);
+        goto l5;
+      od
+    fi
+
+	x,y := T,F;
+
+	x := schoose [T,F, x| y];
+	x := schoose [T,F, x| y] constrain a__b & x | y & z;
+
+	return a,b,T;
+	return;
+
+end

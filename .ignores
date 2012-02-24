@@ -1,0 +1,10 @@
+.svn
+.DS_Store
+bin/c2s
+doc
+obj
+test-log
+*.annot
+*.output
+*~
+c2s-*.tar.gz
