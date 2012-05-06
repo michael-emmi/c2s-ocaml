@@ -23,6 +23,7 @@ CAML_LIB_OBJ = \
 	Options ParsingUtils \
 	BpAst BpParser BpLexer BpUtils \
 	BplAst BplParser BplLexer BplUtils \
+	BplEscAsync \
 	CpAst CpParser CpLexer CpTyping CpUtils CpToBp CpToBpl \
 	CpTranslateUtils \
 	CpAsserts \

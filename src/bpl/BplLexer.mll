@@ -23,6 +23,7 @@
 			"requires", const REQUIRES;
 			"modifies", const MODIFIES;
 			"ensures", const ENSURES;
+			"posts", const POSTS;
 			"invariant", const INVARIANT;
 
 			"free", const FREE;
@@ -113,8 +114,7 @@ let boolean_lit = "true" | "false"
 let numeric_lit = decimal_lit | hex_integer_lit
 
 
-let line_comment = "//" [^ '!' '\n']* '\n'
-
+let line_comment = "//" [^ '\n']*
 let comment_start = "/*"
 let comment_end = "*/"
 
@@ -122,7 +122,7 @@ rule token = parse
   | white          { token lexbuf }
   | line_term      { Lexing.new_line lexbuf; token lexbuf }
 
-  | line_comment   { Lexing.new_line lexbuf; token lexbuf }
+  | line_comment   { token lexbuf }
   | comment_start  { ignore (comment lexbuf); token lexbuf }
 
 (*   | null_lit { NULL } *)
@@ -174,6 +174,7 @@ rule token = parse
   | ')'            { RPAREN lexbuf.Lexing.lex_curr_p }
   | '['            { LBRACKET lexbuf.Lexing.lex_curr_p }
   | ']'            { RBRACKET lexbuf.Lexing.lex_curr_p }
+  | "{:"		   { L_ATTR_DELIM lexbuf.Lexing.lex_curr_p }
   | '{'            { LBRACE lexbuf.Lexing.lex_curr_p }
   | '}'            { RBRACE lexbuf.Lexing.lex_curr_p }
   | '<'            { LANGLE lexbuf.Lexing.lex_curr_p }
@@ -191,6 +192,7 @@ and comment = parse
   | comment_end    { () }
   | line_term      { Lexing.new_line lexbuf; comment lexbuf }
   | _              { comment lexbuf }
+  | eof            { () }
 
 (* Local Variables: *)
 (* compile-command: "cd .. && make -k" *)

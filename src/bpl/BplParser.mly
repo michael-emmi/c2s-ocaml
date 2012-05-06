@@ -26,6 +26,7 @@
 %token EOL EOF
 %token <BplAst.Identifier.t * Lexing.position> ID
 %token <Lexing.position> LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
+%token <Lexing.position> L_ATTR_DELIM
 %token <Lexing.position> LANGLE RANGLE
 %token <Lexing.position> DOT COMMA SEMI COLON ASSIGN
 
@@ -43,7 +44,7 @@
 %token TRUE FALSE 
 %token OLD
 %token FORALL EXISTS
-%token REQUIRES MODIFIES ENSURES INVARIANT
+%token REQUIRES MODIFIES ENSURES POSTS INVARIANT
 %token FREE UNIQUE FINITE COMPLETE
 %token TYPE CONST FUNCTION AXIOM VAR PROCEDURE IMPLEMENTATION
 %token WHERE RETURNS
@@ -187,6 +188,7 @@ procedure_spec:
 	free_opt REQUIRES expression { Specification.Requires ($1,$3) }
   | free_opt MODIFIES identifiers { Specification.Modifies ($1,$3) }
   | free_opt ENSURES expression { Specification.Ensures ($1,$3) }
+  | free_opt POSTS identifiers { Specification.Posts ($1,$3)}
 ; 
 
 free_opt: { false } | FREE { true } ;
@@ -244,10 +246,29 @@ order_spec:
 	{ () }
 ;
 
-/* ToDo: Attribute */
 attributes_opt:
 	{ [] }
+  | attributes { $1 }
 ;
+
+attributes:
+	attribute { $1 :: [] }
+  | attribute attributes { $1 :: $2 }
+;
+
+attribute:
+	L_ATTR_DELIM identifier attr_args_opt RBRACE { $2, $3 }
+;
+
+attr_args_opt:
+	{ [] }
+  | attr_arg attr_args_opt { $1 :: $2 }
+;
+
+attr_arg:
+	expression { Left $1 }
+  | identifier { Right $1 }
+;	
 
 triggers_and_attributes_opt:
 	{ [] }
@@ -309,14 +330,14 @@ labeled_statement:
 ;
 
 statement:
-	ASSERT LPAREN expression RPAREN SEMI { S.Assert $3 }
-  | ASSUME LPAREN expression RPAREN SEMI { S.Assume $3 }
+	ASSERT expression SEMI { S.Assert $2 }
+  | ASSUME expression SEMI { S.Assume $2 }
   | HAVOC identifiers SEMI { S.Havoc $2 }
   | lvalues ASSIGN expressions SEMI { S.Assign ($1,$3) }
-  | CALL identifier LPAREN expressions_opt RPAREN SEMI
-		  { S.Call ($2,$4,[]) }
-  | CALL identifiers ASSIGN identifier LPAREN expressions_opt RPAREN SEMI
-		  { S.Call ($4,$6,$2) } 
+  | CALL attributes_opt identifier LPAREN expressions_opt RPAREN SEMI
+		  { S.Call ($2,$3,$5,[]) }
+  | CALL attributes_opt identifiers ASSIGN identifier LPAREN expressions_opt RPAREN SEMI
+		  { S.Call ($2,$5,$7,$3) } 
 	  /* | CALL FORALL identifier LPAREN expressions RPAREN SEMI
 			  { S.Call ($3,$5,[]) }  */
   | if_statement { $1 }			  

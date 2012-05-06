@@ -161,7 +161,7 @@ let rec stmt s =
 		  | ls, S.Assert e -> [ls, SS.Assert (expr e)]
 		  | ls, S.Assume e -> [ls, SS.Assume (expr e)]
 		  | ls, S.Call (p,es,lvs) ->
-				[ls, SS.Call ( ident p,
+				[ls, SS.Call ( [], ident p,
 							   List.map expr es,
 							   List.map 
 									(function Lv.Id x -> ident x

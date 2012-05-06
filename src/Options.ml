@@ -64,6 +64,10 @@ let full_speclist = [
 	"Generate code in which language?",
 	true;
 	
+	"esc-async", Bool false, [],
+	"Translate AsyncBoogie to Boogie for ESC-style verification.",
+	true;
+	
 	"task-scheduler", String "bfs",
 	["bag"; "bounded-bag"; "dfs"; "bfs"; "bounded-fifo"],
 	"The task buffer scheduler.",

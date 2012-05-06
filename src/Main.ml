@@ -54,10 +54,19 @@ let _ =
 		<| ParsingUtils.parse_file BpParser.program_top BpLexer.token src
 
 	else if Filename.check_suffix src ".bpl" then
+		let p = ParsingUtils.parse_file
+			BplParser.program_top BplLexer.token src in
+			
+				
 		print_to_file "-"
 		<< BplAst.Program.print
 		<< BplUtils.prepare_for_back_end
-		<| ParsingUtils.parse_file BplParser.program_top BplLexer.token src
+		
+		<< ( if Options.get_bool "esc-async"
+			 then BplEscAsync.async_to_seq
+			 else id )
+		
+		<| p
 
 	else if Filename.check_suffix src ".cp" then
 		let p = ParsingUtils.parse_file

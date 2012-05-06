@@ -1,0 +1,6 @@
+.DS_Store
+doc
+obj
+bin/c2s
+*.annot
+*.output

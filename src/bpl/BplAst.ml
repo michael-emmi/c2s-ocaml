@@ -177,10 +177,10 @@ end = struct
 	let print (id,ax) =
 		braces (
 			colon <-> text id
-		    <+> ( sep << punctuate comma
+		    <+> ( sep 
 				  << List.map (Either.reduce
 								   Expression.print
-								   (double_quotes << text))
+								   text)
 				  <|ax ) )
 	let print_seq = sep << List.map print
 	let to_string = render << print
@@ -224,7 +224,7 @@ module rec Statement : sig
 			 | Assume of Expression.t
 			 | Havoc of Identifier.t list
 			 | Assign of Lvalue.t list * Expression.t list
-			 | Call of Identifier.t * Expression.t list * Identifier.t list
+			 | Call of Attribute.t list * Identifier.t * Expression.t list * Identifier.t list
 			 | If of Expression.t option
 				   * LabeledStatement.t list
 				   * LabeledStatement.t list
@@ -243,7 +243,7 @@ end = struct
 			 | Assume of Expression.t
 			 | Havoc of Identifier.t list
 			 | Assign of Lvalue.t list * Expression.t list
-			 | Call of Identifier.t * Expression.t list * Identifier.t list
+			 | Call of Attribute.t list * Identifier.t * Expression.t list * Identifier.t list
 			 | If of Expression.t option
 				   * LabeledStatement.t list
 				   * LabeledStatement.t list
@@ -269,12 +269,13 @@ end = struct
 			  <+> oper ":="
 			  <+> Expression.print_seq es <-> semi
 
-		| Call (p,es,rs) ->
+		| Call (ax,p,es,rs) ->
 			  let assign = match rs with
 				  | [] -> empty
 				  | _ -> Identifier.print_seq rs <+> oper ":="
 			  in
 			  keyword "call"
+			  <+> Attribute.print_seq ax
 			  <+> assign
 			  <+> Identifier.print p
 			  <+> parens (Expression.print_seq es)
@@ -393,7 +394,7 @@ end = struct
 		fold_left_rec
 			( fun ms s -> match s with
 			  | [], Assign (xs,_) -> List.union (List.map Lvalue.name xs) ms
-			  | [], Call (_,_,xs) -> List.union xs ms
+			  | [], Call (_,_,_,xs) -> List.union xs ms
 			  | _ -> ms )
 			[]
 
@@ -401,7 +402,7 @@ end = struct
 		fold_left_rec
 			(fun ps s ->
 				 match s with
-				 | (_, Call (pn,xs,ys)) ->
+				 | (_, Call (_,pn,xs,ys)) ->
 					   List.union [pn,xs,ys] ps
 				 | _ -> ps)
 			[]
@@ -443,6 +444,7 @@ module Specification = struct
 	type t = Requires of bool * Expression.t
 			 | Modifies of bool * Identifier.t list
 			 | Ensures of bool * Expression.t
+			 | Posts of bool * Identifier.t list
 
 	open PrettyPrinting
 	let print = function
@@ -457,6 +459,10 @@ module Specification = struct
 		| Ensures (f,e) ->
 			  ( if f then keyword "free" else empty )
 			  <+> keyword "ensures" <+> Expression.print e
+			  <-> semi
+		| Posts (f,e) ->
+			  ( if f then keyword "free" else empty )
+			  <+> keyword "posts" <+> Identifier.print_seq e
 			  <-> semi
 	let print_seq = vcat << List.map print
 	let to_string = render << print
@@ -503,7 +509,8 @@ end = struct
 			$+$ indent indent_size (Specification.print_seq es)
 			$-$ ( match ds,ss with [],[] -> empty
 				  | _ -> lbrace
-						$-$ indent indent_size (Declaration.print_seq ds)
+						$-$ ( match ds with [] -> empty 
+							  | _ -> indent indent_size (Declaration.print_seq ds) )
 						$-$ indent indent_size (LabeledStatement.print_seq ss)
 						$-$ rbrace )
 	let to_string ax n = render << print ax n

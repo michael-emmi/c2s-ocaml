@@ -93,7 +93,7 @@ let return_assign_decls pgm proc =
 	:= p(e1,..,ek)]. *)
 let dont_ignore_returns pgm s =
 	match s with
-	| (ls,S.Call (n,es,xs)) -> begin
+	| (ls,S.Call (ax,n,es,xs)) -> begin
  		  match Program.find_proc pgm n with
 		  | Some p ->
 				let _, ts = Procedure.signature p in
@@ -106,10 +106,10 @@ let dont_ignore_returns pgm s =
 									 ^^ " add them.\n" ) n;
 
 					let xs = List.mapi ignore_var_name ts in 
-					(ls, S.Call (n,es,xs)) :: []
+					(ls, S.Call (ax,n,es,xs)) :: []
 				end
 				else if List.length xs = List.length ts then
-					(ls, S.Call (n,es,xs)) :: []
+					(ls, S.Call (ax,n,es,xs)) :: []
 
 				else
 					failwith
