@@ -106,6 +106,10 @@ module rec Expression : sig
 	val ident : Identifier.t -> t
 	val bool : bool -> t
 	val num : int -> t
+	
+	val map : (t -> t) -> t -> t
+	val fold : ('a -> t -> 'a) -> 'a -> t -> 'a
+	val map_fold : ('a -> t -> 'a * t) -> 'a -> t -> 'a * t
 
 	val to_string : t -> string
 	val print : t -> PrettyPrinting.doc
@@ -131,7 +135,36 @@ end = struct
  	let ident s = Id s
 	let bool b = Lit (if b then Literal.True else Literal.False)
 	let num n = Lit (Literal.Num n)
-
+	
+	let rec map_fold fn a e = 
+		uncurry fn <| match e with
+		| Not e -> let a, e = map_fold fn a e in a, Not e
+		| Neg e -> let a, e = map_fold fn a e in a, Neg e
+		| Bin (op,e,f) -> 
+			let a, e = map_fold fn a e in
+			let a, f = map_fold fn a f in
+			a, Bin (op,e,f)
+		| Sel (e,es) -> 
+			let a, e = map_fold fn a e in
+			let a, es = List.map_fold_left (map_fold fn) a es in
+			a, Sel (e, es)
+		| Upd (e,es,f) -> 
+			let a, e = map_fold fn a e in
+			let a, es = List.map_fold_left (map_fold fn) a es in
+			let a, f = map_fold fn a f in 
+			a, Upd (e,es,f)
+		| Old e -> let a, e = map_fold fn a e in a, Old e
+		| FnApp (f,es) -> 
+			let a, es = List.map_fold_left (map_fold fn) a es in
+			a, FnApp (f,es)
+		| Q (q,xs,tx,ax,ts,e) -> 
+			let a, e = map_fold fn a e in
+			a, Q (q,xs,tx,ax,ts,e)
+		| _ -> a, e		
+		
+	let map fn = map_fold_to_map map_fold fn
+	let fold fn = map_fold_to_fold map_fold fn
+		
 	open PrettyPrinting
 	let rec print e = match e with
 		| Lit c -> Literal.print c
@@ -163,16 +196,20 @@ end
 and Attribute : sig
 	type t = Identifier.t * ((Expression.t, string) either) list
 	val to_string : t -> string
+	val name : t -> string
 	val bool : string -> bool -> t
 	val num : string -> int -> t
 	val string : string -> string -> t
+	val has_attr : string -> t list -> bool
 	val print : t -> PrettyPrinting.doc
 	val print_seq : t list -> PrettyPrinting.doc
 end = struct
 	type t = Identifier.t * ((Expression.t, string) either) list
+	let name = fst
 	let bool id b = id, [Left (Expression.bool b)]
 	let num id n = id, [Left (Expression.num n)]
 	let string id s = id, [Right s]
+	let has_attr id = List.exists (fun (a,_) -> a = id)
 	open PrettyPrinting
 	let print (id,ax) =
 		braces (
@@ -209,6 +246,17 @@ module Lvalue = struct
 
 	let rec name lv = match lv with Id x -> x | Sel (lv,_) -> name lv
 	let ident x = Id x
+	
+	module E = Expression
+	
+	let rec map_fold_exprs fn a = 
+		function Sel (lv,es) -> 
+			let a, lv = map_fold_exprs fn a lv in
+			let a, es = List.map_fold_left (E.map_fold fn) a es in
+			a, Sel (lv,es)
+		| lv -> a, lv
+		
+	let map_exprs fn = map_fold_to_map map_fold_exprs fn
 
 	open PrettyPrinting
 	let rec print lv = match lv with
@@ -234,6 +282,9 @@ module rec Statement : sig
 			 | Break of Identifier.t option
 			 | Return
 			 | Goto of Identifier.t list
+			
+	val map_exprs : (Expression.t -> Expression.t) -> t -> t
+	val map_fold_exprs : ('a -> Expression.t -> 'a * Expression.t) -> 'a -> t -> 'a * t
 
 	val is_atomic : t -> bool
 	val to_string : t -> string
@@ -258,6 +309,36 @@ end = struct
 		| Assert _ | Assume _ | Havoc _ | Assign _
 		| Call _ | Break _ | Return | Goto _ -> true
 		| _ -> false
+		
+	module E = Expression
+	module Lv = Lvalue
+	module Ls = LabeledStatement
+		
+	let map_fold_exprs fn a = function
+		| Assert e -> let a, e = E.map_fold fn a e in a, Assert e
+		| Assume e -> let a, e = E.map_fold fn a e in a, Assume e
+		| Assign (lvs,es) -> 
+			let a, lvs = List.map_fold_left (Lv.map_fold_exprs fn) a lvs in
+			let a, es = List.map_fold_left (E.map_fold fn) a es in
+			a, Assign (lvs, es)
+		| Call (ax,p,es,r) -> 
+			let a, es = List.map_fold_left (E.map_fold fn) a es in
+			a, Call (ax,p,es,r)
+		| If (e,l,r) -> 
+			let a, e = Option.map_fold (E.map_fold fn) a e in
+			let a, l = List.map_fold_left (Ls.map_fold_exprs fn) a l in
+			let a, r = List.map_fold_left (Ls.map_fold_exprs fn) a r in
+			a, If (e,l,r)
+		| While (e,ivs,ss) -> 
+			let a, e = Option.map_fold (E.map_fold fn) a e in
+			let a, ivs = List.map_fold_left 
+				(Tup2.map_fold (E.map_fold fn) (fun a x -> a, x)) 
+				a ivs in
+			let a, ss = List.map_fold_left (Ls.map_fold_exprs fn) a ss in
+			a, While (e,ivs,ss)
+		| s -> a, s
+		
+	let map_exprs fn = map_fold_to_map map_fold_exprs fn
 
 	open PrettyPrinting
 	let rec print s = match s with
@@ -330,7 +411,8 @@ end = struct
 			  in
 			  keyword "while"
 			  <+> parens (Option.reduce Expression.print (oper "*") e)
-			  $-$ indent indent_size (vcat <| List.map print_invariant ivs)
+			  $-$ ( match ivs with [] -> empty 
+					| _ -> indent indent_size (vcat <| List.map print_invariant ivs) )
 			  $-$ lbrace
 			  $-$ indent indent_size (LabeledStatement.print_seq ss)
 			  $-$ rbrace
@@ -350,7 +432,9 @@ and LabeledStatement : sig
 	type t = Identifier.t list * Statement.t
 
 	val as_cases : t -> (Expression.t option * t list) list
-	val map_stmts : (t -> t list) -> t list -> t list
+	val map_fold_stmts : ('a -> t -> 'a * t list) -> 'a -> t list -> 'a * t list
+	val map_fold_exprs : ('a -> Expression.t -> 'a * Expression.t) -> 'a -> t -> 'a * t
+	val map_exprs : (Expression.t -> Expression.t) -> t -> t
 	val modifies : t list -> Identifier.t list
 	val called : t list -> Identifier.t list
 	val calls : t list ->
@@ -418,17 +502,26 @@ end = struct
 		<< List.map (Tup3.fst)
 		<< calls
 
-	let rec map_stmts fn ss =
-		List.flatten <| List.map (map_stmt fn) ss
-
-	and map_stmt fn s =
+	let rec map_fold_stmts fn a ss =
+		Tup2.map id List.flatten 
+		<| List.map_fold_left (map_fold_stmt fn) a ss
+		
+	and map_fold_stmt fn a s =
 		match s with
-		| (ls,s) when is_atomic s -> fn (ls,s)
+		| (ls,s) when is_atomic s -> fn a (ls,s)
 		| (ls,If (e,tss,ess)) ->
-			  fn (ls, If (e, map_stmts fn tss, map_stmts fn ess))
+			let a, tss = map_fold_stmts fn a tss in
+			let a, ess = map_fold_stmts fn a ess in
+		  	fn a (ls, If (e, tss, ess))
 		| (ls,While (e,ivs,ss)) ->
-			  fn (ls, While (e, ivs, map_stmts fn ss))
+			let a, ss = map_fold_stmts fn a ss in
+		  	fn a (ls, While (e, ivs, ss))
 		| _ -> assert false
+						
+	let map_fold_exprs fn a (ls,s) =
+		let a, s = Statement.map_fold_exprs fn a s in
+		a, (ls,s)
+	let map_exprs fn = map_fold_to_map map_fold_exprs fn
 
 	open PrettyPrinting
 	let print (ids,s) =
@@ -445,6 +538,17 @@ module Specification = struct
 			 | Modifies of bool * Identifier.t list
 			 | Ensures of bool * Expression.t
 			 | Posts of bool * Identifier.t list
+
+	let map_fold_exprs fn a = 
+		function
+		| Requires (fr,e) -> 
+			let a, e = Expression.map_fold fn a e in 
+			a, Requires (fr,e)
+		| Ensures (fr,e) -> 
+			let a, e = Expression.map_fold fn a e in 
+			a, Ensures (fr,e)
+		| sp -> a, sp
+	let map_exprs fn = map_fold_to_map map_fold_exprs fn
 
 	open PrettyPrinting
 	let print = function
@@ -478,9 +582,11 @@ module rec Procedure : sig
 
 	val signature : t -> Type.t list * Type.t list
 	val stmts : t -> LabeledStatement.t list
-	val map_stmts : (LabeledStatement.t -> LabeledStatement.t list) -> t -> t
-	val to_string : Attribute.t list -> Identifier.t -> t -> string
-	val print : Attribute.t list -> Identifier.t -> t -> PrettyPrinting.doc
+	val map_fold_stmts : 
+		('a -> LabeledStatement.t -> 'a * LabeledStatement.t list) -> 'a -> t -> 'a * t
+	val map_exprs : (Expression.t -> Expression.t) -> t -> t
+	val print : bool -> Attribute.t list -> Identifier.t -> t -> PrettyPrinting.doc
+	val to_string : bool -> Attribute.t list -> Identifier.t -> t -> string
 		
 end = struct
 	type t = Identifier.t list
@@ -489,15 +595,25 @@ end = struct
 			* Specification.t list
 			* Declaration.t list
 			* LabeledStatement.t list
+			
+	module Ls = LabeledStatement
 
 	let signature (_,ps,rs,_,_,_) = List.map snd ps, List.map snd rs
 	let stmts (_,_,_,_,_,ss) = ss
-	let map_stmts fn (tx,ps,rs,sx,ds,ss) =
-		tx,ps,rs,sx,ds, LabeledStatement.map_stmts fn ss
+
+	let map_fold_stmts fn a (tx,ps,rs,sx,ds,ss) =
+		let a, ss = LabeledStatement.map_fold_stmts fn a ss in
+		a, (tx,ps,rs,sx,ds,ss)
+
+	let map_exprs fn (tx,ps,rs,sx,ds,ss) =
+		tx,ps,rs,
+		List.map (Specification.map_exprs fn) sx,
+		ds,
+		List.map (Ls.map_exprs fn) ss
 
 	open PrettyPrinting
-	let print ats n (ts,ps,rs,es,ds,ss) =
-		keyword "procedure"
+	let print impl ats n (ts,ps,rs,es,ds,ss) =
+		(if impl then keyword "implementation" else keyword "procedure") 
 		<+> Attribute.print_seq ats
 		<+> Identifier.print n
 		<+> Type.print_type_args ts
@@ -513,7 +629,7 @@ end = struct
 							  | _ -> indent indent_size (Declaration.print_seq ds) )
 						$-$ indent indent_size (LabeledStatement.print_seq ss)
 						$-$ rbrace )
-	let to_string ax n = render << print ax n
+	let to_string impl ax n = render << print impl ax n
 end
 	
 and Declaration : sig
@@ -541,12 +657,11 @@ and Declaration : sig
 			  * Identifier.t
 			  * Procedure.t
 		| Impl of Attribute.t list
-			  * Identifier.t * Identifier.t list
-			  * (Identifier.t * Type.t) list
-			  * (Identifier.t * Type.t) list
-			  * t list * LabeledStatement.t list
+			  * Identifier.t 
+			  * Procedure.t
 
 	val name : t -> Identifier.t
+	val has_attr : string -> t -> bool
 	val to_string : t -> string
 	val print : t -> PrettyPrinting.doc
 	val print_seq : t list -> PrettyPrinting.doc
@@ -575,12 +690,8 @@ end = struct
 			  * Identifier.t
 			  * Procedure.t
 		| Impl of Attribute.t list
-			  * Identifier.t * Identifier.t list
-			  * (Identifier.t * Type.t) list
-			  * (Identifier.t * Type.t) list
-			  * t list * LabeledStatement.t list
-
-	open PrettyPrinting
+			  * Identifier.t 
+			  * Procedure.t 
 
 	let name = function
 		| TypeCtor _ -> "type"
@@ -590,7 +701,21 @@ end = struct
 		| Func (_,n,_,_,_,_) 
 		| Var (_,n,_,_)
 		| Proc (_,n,_)
-		| Impl (_,n,_,_,_,_,_) -> n
+		| Impl (_,n,_) -> n			
+
+	let attrs = function
+		| TypeCtor (ax,_,_,_)
+		| TypeSyn (ax,_,_,_) 
+		| Const (ax,_,_,_,_)
+		| Func (ax,_,_,_,_,_) 
+		| Axiom (ax,_) 
+		| Var (ax,_,_,_)
+		| Proc (ax,_,_)
+		| Impl (ax,_,_) -> ax
+
+	let has_attr a = List.mem a << List.map Attribute.name << attrs
+
+	open PrettyPrinting
 			  
 	let print_function_arg = function
 		| None, t -> Type.print t
@@ -653,22 +778,8 @@ end = struct
 					empty e
 			  <-> semi
 
-		| Proc (ax,n,p) -> Procedure.print ax n p
-
-		| Impl (ats,n,ts,ps,rs,ds,ss) ->
-			  keyword "implementation"
-			  <+> Attribute.print_seq ats
-			  <+> Identifier.print n
-			  <+> Type.print_type_args ts
-			  <+> parens (Type.print_typed_ids ps)
-			  $-$ ( match rs with [] -> empty
-					| _ -> indent indent_size (
-						  keyword "returns"
-						  <+> parens (Type.print_typed_ids rs) ))
-			  $-$ lbrace
-			  $-$ indent indent_size (Declaration.print_seq ds)
-			  $-$ indent indent_size (LabeledStatement.print_seq ss)
-			  $-$ rbrace
+		| Proc (ax,n,p) -> Procedure.print false ax n p
+		| Impl (ax,n,p) -> Procedure.print true ax n p
 
 	let to_string = render << print
 	let print_seq = vcat << List.map print
@@ -681,11 +792,34 @@ module Program = struct
 
 	type t = D.t list
 
-	let map fn ds = List.map fn ds
-	let map_procs fn =
-		map ( function D.Proc (ax,n,p) -> D.Proc (ax,n,fn p)
-			  | d -> d )
-	let map_stmts fn = map_procs (Procedure.map_stmts fn)
+	let map_fold fn a ds = List.map_fold_left fn a ds
+	let map_fold_procs fn a =
+		map_fold ( fun a d ->
+			match d with
+			| D.Proc (ax,n,p) -> 
+				let a, p = fn a p in
+				a, D.Proc (ax,n,p)
+		  	| d -> a, d ) a
+	let map_fold_stmts fn a = 
+		map_fold_procs (Procedure.map_fold_stmts fn) a
+		
+	let map fn = map_fold_to_map map_fold fn
+	let fold fn a = map_fold_to_fold map_fold fn a
+	let map_procs fn = map_fold_to_map map_fold_procs fn
+	let map_stmts fn = map_fold_to_map map_fold_stmts fn
+	let fold_stmts fn a = fst << map_fold_stmts (fun a s -> fn a s, [s]) a
+
+	let map_exprs fn = 
+		List.map ( 
+			function D.Axiom (ax,e) -> D.Axiom (ax, Expression.map fn e)
+			| D.Func (ax,f,tx,ps,r,e) -> 
+				D.Func (ax,f,tx,ps,r, Option.map (Expression.map fn) e)
+			| D.Var (ax,n,t,e) -> 
+				D.Var (ax,n,t,Option.map (Expression.map fn) e)
+			| D.Proc (ax,n,p) -> D.Proc (ax,n,Procedure.map_exprs fn p)
+			| D.Impl (ax,n,p) -> D.Impl (ax,n,Procedure.map_exprs fn p)
+			| d -> d
+		)
 
 	let fold_procs fn =
 		List.fold_left
@@ -697,7 +831,8 @@ module Program = struct
 	let find p n = List.first ((=) n << D.name) p
 	let find_proc p n =
 		Option.seq (function D.Proc (_,_,p) -> Some p | _ -> None)
-		<| List.first ((=) n << D.name) p
+		<| List.first ((=) n << D.name 
+			&&&& (function D.Proc _ -> true | _ -> false)) p
 
 	let rec fold_over_calls pgm fn a p =
 		let rec foc st a d =
@@ -711,6 +846,48 @@ module Program = struct
 				  <| LabeledStatement.called (Procedure.stmts p)
 			| _ -> a
 		in foc [] a (D.Proc ([],"",p))
+		
+	let translate
+		?(replace_global_decls = List.unit)
+		?(new_global_decls = [])
+		?(per_stmt_map = const List.unit)
+		?(per_expr_map = const id) =
+		
+		List.append new_global_decls
+		<< List.flatten
+		<< map replace_global_decls
+		<< map_stmts (per_stmt_map "")
+		<< map_exprs (per_expr_map "")
+		
+	
+		(* ?(rem_global_decls = []) *)
+		(* ?(map_global_decls = List.unit) *)
+		(* ?(rename_global_decls = id) *)
+		(* ?(add_global_decls = []) *)
+		(* ?(add_proc_params = const []) *)
+		(* ?(add_local_decls = const []) *)
+		(* ?(add_proc_rets = const []) *)
+		(* ?(proc_body_prefix = const []) *)
+		(* ?(proc_body_suffix = const []) *)
+		(* ?(per_stmt_map = fun i -> List.unit) *)
+		(* ?(per_expr_map = fun i -> id) = *)
+
+		(* add_decls add_global_decls
+		<< map_decls (fun d ->
+			match d with
+			| D.Proc (ax,n,((ps,ts,rs,es,ds,ss) as p)) -> 
+				let ps' = ps @ add_proc_params (n,p)
+				and ts' = ts @ add_proc_rets (n,p)
+				and ds' = ds @ add_local_decls (n,p)
+				and ss' = proc_body_prefix (n,p) @ ss @ proc_body_suffix (n,p)
+				in D.Proc (ax,n,(ps',ts',rs,es,ds',ss')) :: [] 
+			| d -> d :: [])
+		<< List.map (fun d -> Declaration.map_lvals (Lv.lift << per_expr_map <| D.name d) d)
+		<< List.map (fun d -> Declaration.map_exprs (per_expr_map <| D.name d) d)
+		<< List.map (fun d -> Declaration.map_stmts (per_stmt_map <| D.name d) d)
+		<< map_decls map_global_decls
+		<< map_decls (List.unit << Declaration.rename rename_global_decls)
+		<< rem_decls rem_global_decls	 *)
 
 	open PrettyPrinting
 	let print p = (vcat << List.map D.print <| p) $+$ empty

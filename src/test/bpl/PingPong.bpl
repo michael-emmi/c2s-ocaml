@@ -38,6 +38,7 @@ ensures pending(Ping) <= old(pending(Ping)) + 1;
 }
 
 procedure Main ()
+posts Ping;
 {
     x := false;
     call {:async} Ping ();

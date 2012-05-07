@@ -3,10 +3,32 @@
 open Prelude
 open BplAst
 
+module Declaration = struct
+	include Declaration
+	let parse = ParsingUtils.parse_string
+		BplParser.declarations_top
+		BplLexer.token
+end
+
+module LabeledStatement = struct
+	include LabeledStatement
+	let parse = ParsingUtils.parse_string
+		BplParser.labeled_statements_top
+		BplLexer.token
+end
+
+module Expression = struct
+	include Expression
+	let parse = ParsingUtils.parse_string
+		BplParser.expression_top
+		BplLexer.token
+end
+
 module Sp = Specification
 module S = Statement
 module Ls = LabeledStatement
 module D = Declaration
+module E = Expression
 
 (** Recalculate the [modifies] clause based on global variables which are
 	actually (recursively) modified by each procedure. *)

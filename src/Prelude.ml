@@ -36,6 +36,9 @@ let fresh_int_fn () =
 let rec ntimes f x n =
 	if n < 1 then x
 	else ntimes f (f x) (n-1)
+	
+let map_fold_to_map mff fn = snd << mff (fun acc x -> acc, fn x) ()
+let map_fold_to_fold mff fn acc = fst << mff (fun acc x -> fn acc x, x) acc
 
 module Control = struct
 	let rec until until_fn do_fn acc =
@@ -55,6 +58,10 @@ module Tup2 = struct
 	let make x y = x,y
 	let ekam y x = x,y
 	let rotate (x,y) = y,x
+	let map_fold f g acc (x,y) = 
+		let acc, x = f acc x in
+		let acc, y = g acc y in
+		acc, (x,y)
 	let map f g (x,y) = f x, g y
 	let mapp f (x,y) = f x, f y
 	let fold_left f a (x,y) = f (f a x) y
@@ -267,6 +274,10 @@ module Option = struct
     | None, None -> true
     | Some x, Some y -> f x y
     | _ -> false
+
+  let map_fold fn acc = function
+	| None -> acc, None
+	| Some x -> let acc, x = fn acc x in acc, Some x
 	
   let map f = function
     | None -> None

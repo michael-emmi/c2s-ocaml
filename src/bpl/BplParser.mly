@@ -52,9 +52,11 @@
 %token ASSERT ASSUME HAVOC CALL WHILE BREAK RETURN GOTO IF ELSE
 %token INVARIANT
   
-%start program_top labeled_statements_top
+%start program_top declarations_top labeled_statements_top expression_top
 %type <BplAst.Program.t> program_top
+%type <BplAst.Declaration.t list> declarations_top
 %type <BplAst.LabeledStatement.t list> labeled_statements_top
+%type <BplAst.Expression.t> expression_top
 
 %nonassoc LPAREN RPAREN
 %left COLON
@@ -77,8 +79,16 @@ program_top:
   program EOF { $1 }
 ;
 
+declarations_top:
+	declarations EOF { $1 }
+;
+
 labeled_statements_top:
 	labeled_statements EOF { $1 }
+;
+
+expression_top:
+	expression EOF { $1 }
 ;
 
 program:
@@ -140,7 +150,7 @@ declaration:
 		  procedure_signature
 		  LBRACE var_decls_opt labeled_statements_opt RBRACE {
 			  let ts, ps, rs = $4 in
-			  D.Impl ($2,$3,ts,ps,rs,$6,$7) :: []
+			  D.Impl ($2,$3,(ts,ps,rs,[],$6,$7)) :: []
 		  } 
 ;
 
@@ -312,6 +322,7 @@ atom_type:
 	BOOL { Type.Bool }
   | INT { Type.Int }
   | BV { Type.Bv $1 }
+  | identifier { Type.T ($1,[]) }
 ;
 
 labeled_statements_opt:
@@ -389,7 +400,7 @@ invariant:
 ;
 
 block_statement:
-	LBRACE labeled_statements RBRACE { $2 }
+	LBRACE labeled_statements_opt RBRACE { $2 }
 ;
 	
 expression_or_wildcard:
