@@ -34,7 +34,7 @@ let async_to_seq p =
 	let asyncCalls = 
 		Program.fold_stmts
 		( fun ps s -> match s with 
-			| (ls, S.Call (ax,p,_,_)) when A.has_attr "async" ax ->
+			| (ls, S.Call (ax,p,_,_)) when A.has "async" ax ->
 				List.add_uniq p ps
 			| _ -> ps )
 		[] p
@@ -43,7 +43,7 @@ let async_to_seq p =
 	let dispatchInvariants =
 		Program.fold 
 		( fun es d -> match d with
-			| D.Axiom (ax,e) when D.has_attr "dispatch" d ->
+			| D.Axiom (ax,e) when A.has "dispatch" ax ->
 				(E.map pendingPredToSelect e) :: es
 			| _ -> es
 		)
@@ -55,7 +55,7 @@ let async_to_seq p =
 		~per_stmt_map: ( ... ) *)
 	Program.translate
 		~replace_global_decls: (
-			function D.Axiom (ax,e) as d when D.has_attr "dispatch" d -> []
+			function D.Axiom (ax,e) when A.has "dispatch" ax -> []
 			| D.Proc (ax,n,(ts,ps,rs,es,ds,ss)) ->
 				let posts, es = 
 					List.fold_left 
@@ -73,7 +73,7 @@ let async_to_seq p =
 					<| asyncCalls
 					in			
 					
-				let ax = if n = "Main" then (A.num "inline" 1 :: ax) else ax in
+				(* let ax = if n = "Main" then (A.num "inline" 1 :: ax) else ax in *)
 										
 				[ D.Proc (ax,n,(ts,ps,rs,es@notPosted,ds,ss)) ]
 
@@ -86,7 +86,7 @@ let async_to_seq p =
 				const unique %s: ProcId; \
 				var pending: [ProcId] int; \
 				procedure AsyncMain () { \
-					assume (forall p: ProcId :: pending[p] == 0); \
+					ASYNC_MAIN: assume (forall p: ProcId :: pending[p] == 0); \
 				    call Main (); \
 				    while (*) \
 					%s
@@ -103,16 +103,16 @@ let async_to_seq p =
 				  << List.map (fun p -> 
 						sprintf 
 							"if (*) { \
-								assume pending[%s] > 0;
+								DISPATCH_%s: assume pending[%s] > 0;
 							    pending[%s] := pending[%s] - 1; \
 							 	call %s(); \
-							}" p p p p
+							}" p p p p p
 					)
 				  <| asyncCalls )
 
 		)
 		~per_stmt_map: (fun n -> (
-			function (ls, S.Call (ax,p,es,r)) when A.has_attr "async" ax ->
+			function (ls, S.Call (ax,p,es,r)) when A.has "async" ax ->
 				
 				(* ToDo -- add labels back*)
 				Ls.parse <| sprintf "pending[%s] := pending[%s] + 1;" p p

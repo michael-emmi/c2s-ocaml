@@ -470,6 +470,12 @@ end
 (*      end : S with type key = Ord.t) *)
 (* end *)
 
+module StringSet = Set.Make(
+	struct
+		type t = string
+		let compare = compare
+	end)
+
 module IntMap = Map.Make(
 	struct
 		type t = int
