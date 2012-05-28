@@ -1,0 +1,13 @@
+let main_proc = "main"
+let real_main_proc = "__XX__main"
+let init_proc = "__XX__init"
+let validate_proc = "__XX__validate"
+let check_proc = "__XX__check"
+let new_proc = "__XX__new"
+let err_flag = "__XX__err_flag"
+let self_var = "__self"
+let alloc_var = "__XX__alloc"
+let root_pid = "__XX__root"
+let null_pid = "__XX__null"
+let pid_type = CpAst.Type.T "pid"
+let aux_procs = [init_proc; validate_proc; check_proc]
