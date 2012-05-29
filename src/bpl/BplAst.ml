@@ -209,23 +209,27 @@ end
 
 and Attribute : sig
 	type t = Identifier.t * ((Expression.t, string) either) list
-	val to_string : t -> string
-	val name : t -> string
 	val bool : string -> bool -> t
 	val num : string -> int -> t
 	val string : string -> string -> t
-	val has_attr : string -> t list -> bool
+
+	val name : t -> string
+	val has : string -> t list -> bool
 	val strip : string -> t list -> t list
+	val to_string : t -> string
+
 	val print : t -> PrettyPrinting.doc
 	val print_seq : t list -> PrettyPrinting.doc
 end = struct
 	type t = Identifier.t * ((Expression.t, string) either) list
-	let name = fst
 	let bool id b = id, [Left (Expression.bool b)]
 	let num id n = id, [Left (Expression.num n)]
 	let string id s = id, [Right s]
-	let has_attr id = List.exists (fun (a,_) -> a = id)
+
+	let name = fst
+	let has id = List.exists (fun (a,_) -> a = id)
 	let strip id = List.filter ((<>) id << fst)
+
 	open PrettyPrinting
 	let print (id,ax) =
 		braces (
@@ -308,10 +312,11 @@ module rec Statement : sig
 			 | Return
 			 | Goto of Identifier.t list
 			
-	val map_exprs : (Expression.t -> Expression.t) -> t -> t
-	val map_fold_exprs : ('a -> Expression.t -> 'a * Expression.t) -> 'a -> t -> 'a * t
-
 	val is_atomic : t -> bool
+
+	val map_fold_exprs : ('a -> Expression.t -> 'a * Expression.t) -> 'a -> t -> 'a * t
+	val map_exprs : (Expression.t -> Expression.t) -> t -> t
+
 	val to_string : t -> string
 	val print : t -> PrettyPrinting.doc
 end = struct
@@ -387,9 +392,24 @@ end = struct
 			  <+> parens (Expression.print_seq es)
 			  <-> semi
 
-		| If (_,_,[_, If _]) as s ->
+		| If (_,_,[_, If _]) as s ->			
+			
+			let as_cases s =
+				let rec collect cs ss =
+					match ss with
+					| [ls, If (e,ts,us)] ->
+						  if ls <> [] then
+							  Printf.eprintf
+								  ( "Warning: Losing labels %s in " 
+									^^ "BplAst.LabeledStatement.as_cases.\n" )
+								  (String.concat ", " ls);
+						  collect ((e,ts) :: cs) us
 
-			  let cases = LabeledStatement.as_cases ([],s) in
+					| _ -> (None, ss) :: cs
+				in List.rev << collect [] <| [s]
+			in
+
+			  let cases = as_cases ([],s) in
 
 			  vcat
 			  << List.mapi
@@ -455,16 +475,15 @@ end
 	
 and LabeledStatement : sig
 	type t = Identifier.t list * Statement.t
+	
 	val stmt : Statement.t -> t
-	val as_cases : t -> (Expression.t option * t list) list
+
 	val map_fold_stmts : ('a -> t -> 'a * t list) -> 'a -> t list -> 'a * t list
 	val map_fold_exprs : ('a -> Expression.t -> 'a * Expression.t) -> 'a -> t -> 'a * t
 	val map_exprs : (Expression.t -> Expression.t) -> t -> t
+	val fold_stmts : ('a -> t -> 'a) -> 'a -> t list -> 'a
+	
 	val contains_rec : (t -> bool) -> t list -> bool
-	val modifies : t list -> Identifier.t list
-	val called : t list -> Identifier.t list
-	val calls : t list ->
-		(Identifier.t * Expression.t list * Identifier.t list) list
 		
 	val to_string : t -> string
 	val print : t -> PrettyPrinting.doc
@@ -475,62 +494,6 @@ end = struct
 	open Statement
 	
 	let stmt s = ([],s)
-
-	let as_cases s =
-		let rec collect cs ss =
-			match ss with
-			| [ls, If (e,ts,us)] ->
-				  if ls <> [] then
-					  Printf.eprintf
-						  ( "Warning: Losing labels %s in " 
-							^^ "BplAst.LabeledStatement.as_cases.\n" )
-						  (String.concat ", " ls);
-				  collect ((e,ts) :: cs) us
-
-			| _ -> (None, ss) :: cs
-		in List.rev << collect [] <| [s]
-
-	let rec fold_left_rec fn =
-		List.fold_left
-			( fun a s ->
-				  ( match s with
-					| (ls, If (e,tss,ess)) ->
-						  (flip <| fold_left_rec fn) ess
-						  << (flip <| fold_left_rec fn) tss
-					| (ls, While (e,_,ss)) ->
-						  (flip <| fold_left_rec fn) ss
-					| _ -> id )
-				  <| fn a s )
-				
-	let contains_rec p = fold_left_rec (fun b s -> b or p s) false
-
-	let modifies =
-		fold_left_rec
-			( fun ms s -> match s with
-			  | [], Assign (xs,_) -> List.union (List.map Lvalue.name xs) ms
-			  | [], Call (_,_,_,xs) -> List.union xs ms
-			  | _ -> ms )
-			[]
-
-	let calls =
-		fold_left_rec
-			(fun ps s ->
-				 match s with
-				 | (_, Call (_,pn,xs,ys)) ->
-					   List.union [pn,xs,ys] ps
-				 | _ -> ps)
-			[]
-		
-	module StringSet = Set.Make(
-		struct
-			type t = string
-			let compare = compare
-		end)
-		
-	let called =
-		StringSet.uniqify_list
-		<< List.map (Tup3.fst)
-		<< calls
 
 	let rec map_fold_stmts fn a ss =
 		Tup2.map id List.flatten 
@@ -547,12 +510,16 @@ end = struct
 			let a, ss = map_fold_stmts fn a ss in
 		  	fn a (ls, While (e, ivs, ss))
 		| _ -> assert false
+		
+	let fold_stmts fn a = fst << map_fold_stmts (fun a s -> fn a s, [s]) a
+	
+	let contains_rec p = fold_stmts (fun b s -> b or p s) false
 						
 	let map_fold_exprs fn a (ls,s) =
 		let a, s = Statement.map_fold_exprs fn a s in
 		a, (ls,s)
 	let map_exprs fn = map_fold_to_map map_fold_exprs fn
-
+		
 	open PrettyPrinting
 	let print (ids,s) =
 		sep	(
@@ -693,8 +660,8 @@ and Declaration : sig
 	val name : t -> Identifier.t
 	val rename : (Identifier.t -> Identifier.t) -> t -> t
 	val kind : t -> string
-	(* val has_attr : string -> t -> bool *)
 	val to_const : t -> t
+	
 	val to_string : t -> string
 	val print : t -> PrettyPrinting.doc
 	val print_seq : t list -> PrettyPrinting.doc
@@ -754,21 +721,11 @@ end = struct
 		| Var _ -> "var"
 		| Proc _ -> "proc"
 		| Impl _ -> "impl"
-
-	let attrs = function
-		| TypeCtor (ax,_,_,_)
-		| TypeSyn (ax,_,_,_) 
-		| Const (ax,_,_,_,_)
-		| Func (ax,_,_,_,_,_) 
-		| Axiom (ax,_) 
-		| Var (ax,_,_,_)
-		| Proc (ax,_,_)
-		| Impl (ax,_,_) -> ax
-
-	(* let has_attr a = List.mem a << List.map Attribute.name << attrs *)
-	
+		
+		
 	let to_const = function
-		| Var (ax,n,t,e) -> Const (ax,false,n,t,())
+		| Var (ax,n,t,e) ->
+			Const (ax,false,n,t,())
 		| d -> d
 
 	open PrettyPrinting
@@ -896,19 +853,6 @@ module Program = struct
 		Option.seq (function D.Proc (_,_,p) -> Some p | _ -> None)
 		<| List.first ((=) n << D.name 
 			&&&& (function D.Proc _ -> true | _ -> false)) p
-
-	let rec fold_over_calls pgm fn a p =
-		let rec foc st a d =
-			match d with
-			| D.Proc (_,n,p) ->
-				  (flip fn) p
-				  << List.fold_left (foc (n::st)) a
-				  << List.filter (not << (flip List.mem) (n::st) << D.name)
-				  << Option.cat
-				  << List.map (find pgm)
-				  <| LabeledStatement.called (Procedure.stmts p)
-			| _ -> a
-		in foc [] a (D.Proc ([],"",p))
 		
 	let translate
 		?(replace_global_decls = List.unit)

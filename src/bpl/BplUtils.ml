@@ -20,6 +20,8 @@ end
 
 module LabeledStatement = struct
 	include LabeledStatement
+	open Statement
+	
 	let parse = ParsingUtils.parse_string
 		BplParser.labeled_statements_top
 		BplLexer.token
@@ -47,6 +49,27 @@ module LabeledStatement = struct
 		function [] -> (ls', S.skip) :: []
 		| (ls, s) :: ss -> (ls@ls', s) :: ss
 
+	let modifies =
+		fold_stmts
+			( fun ms s -> match s with
+			  | [], Assign (xs,_) -> List.union (List.map Lvalue.name xs) ms
+			  | [], Call (_,_,_,xs) -> List.union xs ms
+			  | _ -> ms )
+			[]
+
+	let calls =
+		fold_stmts
+			(fun ps s ->
+				 match s with
+				 | (_, Call (_,pn,xs,ys)) ->
+					   List.union [pn,xs,ys] ps
+				 | _ -> ps)
+			[]
+
+	let called =
+		StringSet.uniqify_list
+		<< List.map Tup3.fst
+		<< calls
 end
 
 module Expression = struct
@@ -56,7 +79,23 @@ module Expression = struct
 		BplLexer.token
 end
 
-module A = Attribute
+module Program = struct
+	include Program
+	
+	let rec fold_over_calls pgm fn a p =
+		let rec foc st a d =
+			match d with
+			| D.Proc (_,n,p) ->
+				  (flip fn) p
+				  << List.fold_left (foc (n::st)) a
+				  << List.filter (not << (flip List.mem) (n::st) << D.name)
+				  << Option.cat
+				  << List.map (find pgm)
+				  <| LabeledStatement.called (Procedure.stmts p)
+			| _ -> a
+		in foc [] a (D.Proc ([],"",p))
+end
+
 module Sp = Specification
 module S = Statement
 module Ls = LabeledStatement

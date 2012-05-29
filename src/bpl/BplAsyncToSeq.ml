@@ -52,7 +52,7 @@ let post_to_call_dfs p =
 	let translate_post s =
 		match s with
 		
-		| ls, S.Call (ax,n,ps,[]) when A.has_attr "async" ax ->
+		| ls, S.Call (ax,n,ps,[]) when A.has "async" ax ->
 
 			Ls.add_labels ls [
 			  saved_gs $:=$ gs;
@@ -69,7 +69,7 @@ let post_to_call_dfs p =
 			  (* Ls.stmt <| S.Dead (saved_gs @ guess_gs); *)
 		  ]	
 			
-	    | _, S.Call (ax,_,_,_) when A.has_attr "async" ax ->
+	    | _, S.Call (ax,_,_,_) when A.has "async" ax ->
 			failwith "Found async call with assignments."
 			
 		| _ -> [s]
@@ -86,9 +86,9 @@ let post_to_call_dfs p =
 		Program.translate
 			~per_stmt_map: 
 				(fun _ -> function
-				   | ls, S.Call (ax,n,ps,[]) when A.has_attr "async" ax ->
+				   | ls, S.Call (ax,n,ps,[]) when A.has "async" ax ->
 					 	(ls, S.Call (A.strip "async" ax,n,ps,[]))::[]
-				   | _, S.Call (ax,_,_,_) when A.has_attr "async" ax ->
+				   | _, S.Call (ax,_,_,_) when A.has "async" ax ->
 						failwith "Found async call with assignments."
 				   | s -> s :: [])
 		<< id
@@ -107,7 +107,7 @@ let post_to_call_dfs p =
 				( fun (_,p) -> 
 					if Ls.contains_rec 
 						(function (_, S.Call (ax,_,_,_)) 
-						          when A.has_attr "async" ax -> true 
+						          when A.has "async" ax -> true 
 						 | _ -> false) 
 						(Procedure.stmts p)
 					then extra_proc_decls

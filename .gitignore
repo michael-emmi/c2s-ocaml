@@ -5,3 +5,4 @@ bin/c2s
 *.annot
 *.output
 *.async.bpl
+*.tmproj
