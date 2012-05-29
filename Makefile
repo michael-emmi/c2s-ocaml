@@ -22,9 +22,11 @@ CAML_LIB_OBJ = \
 	Prelude PrettyPrinting \
 	Options ParsingUtils \
 	BpAst BpParser BpLexer BpUtils \
-	BplAst BplParser BplLexer BplUtils \
+	BplAst BplParser BplLexer BplUtils BplTranslateUtils \
 	BplEscAsync \
-	CpAst CpParser CpLexer CpTyping CpUtils CpToBp CpToBpl \
+	BplAsyncToSeq \
+	CpAst CpParser CpLexer CpTyping CpUtils \
+	CpToBp CpToBpl \
 	CpTranslateUtils \
 	CpAsserts \
 	CpMultiToSingle \

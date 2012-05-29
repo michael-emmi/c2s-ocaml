@@ -43,7 +43,7 @@ let async_to_seq p =
 	let dispatchInvariants =
 		Program.fold 
 		( fun es d -> match d with
-			| D.Axiom (ax,e) when D.has_attr "dispatch" d ->
+			| D.Axiom (ax,e) when A.has_attr "dispatch" ax ->
 				(E.map pendingPredToSelect e) :: es
 			| _ -> es
 		)
@@ -55,7 +55,7 @@ let async_to_seq p =
 		~per_stmt_map: ( ... ) *)
 	Program.translate
 		~replace_global_decls: (
-			function D.Axiom (ax,e) as d when D.has_attr "dispatch" d -> []
+			function D.Axiom (ax,e) when A.has_attr "dispatch" ax -> []
 			| D.Proc (ax,n,(ts,ps,rs,es,ds,ss)) ->
 				let posts, es = 
 					List.fold_left 

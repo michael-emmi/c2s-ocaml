@@ -56,7 +56,6 @@ let _ =
 	else if Filename.check_suffix src ".bpl" then
 		let p = ParsingUtils.parse_file
 			BplParser.program_top BplLexer.token src in
-			
 				
 		print_to_file "-"
 		<< BplAst.Program.print
@@ -64,6 +63,10 @@ let _ =
 		
 		<< ( if Options.get_bool "esc-async"
 			 then BplEscAsync.async_to_seq
+			 else id )
+			
+		<< ( if Options.get_string "task-scheduler" = "dfs"
+			 then BplAsyncToSeq.post_to_call_dfs 
 			 else id )
 		
 		<| p

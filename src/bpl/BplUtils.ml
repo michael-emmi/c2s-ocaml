@@ -10,11 +10,43 @@ module Declaration = struct
 		BplLexer.token
 end
 
+module Statement = struct
+	include Statement
+	module A = Attribute
+	let skip = Call ([A.bool "skip" true], "skip", [], [])
+	let yield = Call ([A.bool "yield" true], "yield", [], [])
+	let post n ps = Call ([A.bool "async" true],n,ps,[])
+end
+
 module LabeledStatement = struct
 	include LabeledStatement
 	let parse = ParsingUtils.parse_string
 		BplParser.labeled_statements_top
 		BplLexer.token
+
+	module S = Statement
+	
+	let skip = stmt (S.skip)
+	let assign xs es = stmt (S.Assign (xs,es))
+	let assert_ e = stmt (S.Assert e)
+	let assume e = stmt (S.Assume e)
+	let ifthenelse e ss ts = stmt (S.If (e,ss,ts))
+	let ifthen e ss = ifthenelse e ss [skip]
+	let whiledo e es ss = stmt (S.While (e,es,ss))
+	let call p ps xs = stmt (S.Call ([],p,ps,xs))
+	let return = stmt S.Return
+	let post p ps = stmt (S.post p ps)
+	let yield = stmt (S.yield)
+
+	let incr e = 
+		assign 
+			[Lvalue.from_expr e] 
+			[Expression.Bin (BinaryOp.Plus, e, Expression.num 1) ] 
+
+	let rec add_labels ls' = 
+		function [] -> (ls', S.skip) :: []
+		| (ls, s) :: ss -> (ls@ls', s) :: ss
+
 end
 
 module Expression = struct
@@ -24,11 +56,56 @@ module Expression = struct
 		BplLexer.token
 end
 
+module A = Attribute
 module Sp = Specification
 module S = Statement
 module Ls = LabeledStatement
 module D = Declaration
 module E = Expression
+
+
+module Operators = struct
+	module A = Attribute
+	module T = Type
+	module D = Declaration
+	module E = Expression
+	module Lv = Lvalue
+	module S = Statement
+	module Ls = LabeledStatement
+	module Bop = BinaryOp
+
+	let (|:=|) xs es = Ls.assign (List.map Lv.from_expr xs) es
+	let ($:=$) xs ys = List.map E.ident xs |:=| List.map E.ident ys
+	(* let ($:=?$) xs () = Ls.assign (List.map Lv.ident xs) (E.choice xs) *)
+	let ($:=?$) xs () = Ls.stmt (S.Havoc xs)
+
+	let (|&|) e f = E.conj [e;f]
+	let (|||) e f = E.disj [e;f]
+	let (|=>|) e f = E.Bin (Bop.Imp, e, f)
+
+	let ($&|) x f = E.conj [E.ident x; f]
+
+	let ($&$) x y = E.conj [E.ident x; E.ident y]
+	let ($&$) x y = E.conj [E.ident x; E.ident y]
+	let (!$) x = E.Not (E.ident x)
+
+	let (!|) e = E.Not e
+	let (|=|) x y = E.Bin (Bop.Eq, x, y)
+	let (|<|) x y = E.Bin (Bop.Lt, x, y)
+	let (|<=|) x y = E.Bin (Bop.Lte, x, y)
+	let (|>=|) x y = E.Bin (Bop.Gte, x, y)
+
+		
+	let (|+|) x y = E.Bin (Bop.Plus, x, y)
+	let (|-|) x y = E.Bin (Bop.Minus, x, y)
+
+	let lift_to_ids op = curry (uncurry op << Tup2.mapp E.ident)
+
+	let ($=$) = lift_to_ids (|=|)
+	let ($<$) = lift_to_ids (|<|)
+	let ($>=$) = lift_to_ids (|>=|)
+end
+
 
 (** Recalculate the [modifies] clause based on global variables which are
 	actually (recursively) modified by each procedure. *)
@@ -147,7 +224,7 @@ let dont_ignore_returns pgm s =
 (** Apply whatever transformations necessary for the back-end in use. *)
 let prepare_for_back_end pgm =
 	fix_modifies
-	<< Program.map_stmts (dont_ignore_returns pgm)
+	(* << Program.map_stmts (dont_ignore_returns pgm) *)
 	<< Program.map_procs
 		(fun ((tx,ps,rs,sx,ds,ss) as proc) ->
 			 tx, ps,rs,sx, ds @ (return_assign_decls pgm proc), ss)
