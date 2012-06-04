@@ -139,6 +139,11 @@ end = struct
 	let bool b = Lit (if b then Literal.True else Literal.False)
 	let num n = Lit (Literal.Num n)
 	
+	let is_term = function
+		| Lit _ | Id _ | Old _ | FnApp _ 
+		| Not _ | Neg _ | Sel _ | Upd _ -> true
+		| _ -> false
+
 	open BinaryOp
 	
 	let conj = function
@@ -185,10 +190,10 @@ end = struct
 		| Id x -> Identifier.print x
 		| Old e -> keyword "old" <-> parens (print e)
 		| FnApp (f,es) -> Identifier.print f <-> parens (print_seq es)
-		| Not e -> parens (oper "!" <-> print e)
-		| Neg e -> oper "-" <-> (parens <| print e)
-		| Bin (op,e,e') ->
-			  parens ( print e <+> BinaryOp.print op <+> print e' )
+		| Not e -> oper "!" <-> print_auto_parens e
+		| Neg e -> oper "-" <-> print_auto_parens e
+		| Bin (op,e,e') -> 
+			print_auto_parens e <+> BinaryOp.print op <+> print_auto_parens e'
 		| Sel (e,es) -> print e <-> brackets (print_seq es)
 		| Upd (e,es,f) ->
 			  print e
@@ -202,6 +207,8 @@ end = struct
 				  <+> Attribute.print_seq ax
 				  <+> Trigger.print_seq ts
 				  <+> print e )
+
+	and print_auto_parens e = if is_term e then print e else parens (print e)
 
 	and print_seq es = sep << punctuate comma << List.map print <| es
 	let to_string = render << print
