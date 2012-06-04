@@ -744,11 +744,15 @@ let lal_reps_with_maps k p =
 					else [None, Type.Int])
 			
 			~add_local_decls: 
-				( fun (n,p) -> 
+				( fun (n,_) -> 
 					if n = Tr.main_proc then extra_proc_params
-					else if Ls.contains_rec 
-						(function Ls.S (_,S.Yield) -> true | _ -> false)
-						(Procedure.stmts p)
+					else if 
+						Option.reduce 
+							(Ls.contains_rec 
+								(function Ls.S (_,S.Yield) -> true | _ -> false))
+							false
+						<< Option.map Procedure.stmts
+						<| Program.find_proc p n
 					then extra_proc_decls 
 					else [] )
 					
@@ -770,6 +774,7 @@ let lal_reps_with_maps k p =
 				(fun p -> 
 					if p = Tr.init_proc then first_gval gvars
 					else if p = Tr.check_proc then last_gval gvars
+					else if p = Tr.validate_proc then id
 					else current_gval gvars)
 
 		  << id ) p

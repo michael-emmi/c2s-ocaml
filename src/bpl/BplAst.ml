@@ -824,7 +824,8 @@ module Program = struct
 	(* let map_stmts fn = map_fold_to_map map_fold_stmts fn *)
 
 	let map_procs fn = snd << map_fold_procs (fun _ (_,p) -> (), fn p) ()
-	let map_stmts fn = snd << map_fold_stmts (fun n _ s -> (), fn n s) ()
+	let map_stmts : (Identifier.t -> Ls.t -> Ls.t list) -> t -> t = fun fn ->
+		snd << map_fold_stmts (fun n _ s -> (), fn n s) ()
 	
 	let fold_stmts fn a = fst << map_fold_stmts (fun _ a s -> fn a s, [s]) a
 

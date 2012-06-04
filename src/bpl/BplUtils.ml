@@ -263,7 +263,7 @@ let dont_ignore_returns pgm s =
 (** Apply whatever transformations necessary for the back-end in use. *)
 let prepare_for_back_end pgm =
 	fix_modifies
-	(* << Program.map_stmts (dont_ignore_returns pgm) *)
+	<< Program.map_stmts (const <| dont_ignore_returns pgm)
 	<< Program.map_procs
 		(fun ((tx,ps,rs,sx,ds,ss) as proc) ->
 			 tx, ps,rs,sx, ds @ (return_assign_decls pgm proc), ss)

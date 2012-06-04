@@ -101,10 +101,13 @@ let post_to_call_dfs p =
 						[ Ls.assume validity_predicate ]
 					else [] )
 			~add_local_decls: 
-				( fun (_,p) -> 
-					if Ls.contains_rec 
-						(function Ls.S (_,S.Post _) -> true | _ -> false) 
-						(Procedure.stmts p)
+				( fun (n,_) -> 
+					if Option.reduce 
+						(Ls.contains_rec 
+							(function Ls.S (_,S.Post _) -> true | _ -> false))
+						false
+						<< Option.map Procedure.stmts
+						<| Program.find_proc p n
 					then extra_proc_decls
 					else [] )
 			~per_expr_map: 
