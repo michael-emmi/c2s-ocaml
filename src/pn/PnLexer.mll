@@ -1,6 +1,6 @@
 {
 	(** Lexer for Boogie programs. *)
-	open BplParser
+	open PnParser
 	open Prelude
 	exception Eof
 
@@ -9,49 +9,11 @@
 		List.iter (fun (k,v) -> Hashtbl.add keyword_tbl k v) [
 			(*   	  "keyword", (fun l -> KEY_WORD l); *)
 
-			"bool", const BOOL;
-			"int", const INT;
-
-			"false", const FALSE;
-			"true", const TRUE;
-
-			"old", const OLD;
-
-			"forall", const FORALL;
-			"exists", const EXISTS;
-
-			"requires", const REQUIRES;
-			"modifies", const MODIFIES;
-			"ensures", const ENSURES;
-			"posts", const POSTS;
-			"invariant", const INVARIANT;
-
-			"free", const FREE;
-			"unique", const UNIQUE;
-			"finite", const FINITE;
-			"complete", const COMPLETE;
-			
-			"type", const TYPE;
-			"const", const CONST;
-			"function", const FUNCTION;
-			"axiom", const AXIOM;
-			"var", const VAR;
-			"procedure", const PROCEDURE;
-			"implementation", const IMPLEMENTATION;
-
-			"where", const WHERE;
-			"returns", const RETURNS;
-
-			"assume", const ASSUME;
-			"assert", const ASSERT;
-			"havoc", const HAVOC;
-			"call", const CALL;
-			"while", const WHILE;
-			"break", const BREAK;
-			"return", const RETURN;
-			"goto", const GOTO;
-			"if", const IF;
-			"else", const ELSE;
+			"vars", const VARS;
+			"rules", const RULES;
+			"init", const INIT;
+			"target", const TARGET;
+			"invariants", const INVARIANTS;
 		]
 
 	let unescape_quotes s =
@@ -102,6 +64,7 @@ let hex_escape = '\\' ['x' 'X'] hex_digit hex_digit
 let double_string_char = [^ '"' '\n'] | escape
 let single_string_char = [^ '\'' '\n'] | escape
 
+
 (*
 Using ' as a part of the symbol for primed variables
 let string_lit =
@@ -139,51 +102,13 @@ rule token = parse
 
   | decimal_integer_lit as lxm { NUMBER (int_of_string lxm) }
 
-  | bv_type as lxm { BV (int_of_string <| String.drop 2 lxm) }
-
-
-
-  | "==>"          { IMPLIES }
-  | "<==>"         { IFF }
-  | "||"           { OR }
-  | "&&"           { AND }
-
-  | "=="           { EQ }
-  | "!="           { NEQ }
-  | '<'            { LT }
-  | '>'            { GT }
-  | "<="           { LTE }
-  | ">="           { GTE }
-  | "<:"           { SUB }
-
-  | "++"           { CONCAT }
+  | "->"           { ARROW }
+  | ">="           { GE }
+  | '='			   { EQ }
   | '+'            { PLUS }
   | '-'            { MINUS }
-  | '*'            { AST }
-  | '/'            { DIV }
-  | '%'            { MOD }
 
-  | '='            { SEQ }
-  | '!'            { NOT }
-  | '_'            { UNDER }
-
-  | "::"           { QSEP }
-
-  | ":="           { ASSIGN lexbuf.Lexing.lex_curr_p }
-
-  | '('            { LPAREN lexbuf.Lexing.lex_curr_p }
-  | ')'            { RPAREN lexbuf.Lexing.lex_curr_p }
-  | '['            { LBRACKET lexbuf.Lexing.lex_curr_p }
-  | ']'            { RBRACKET lexbuf.Lexing.lex_curr_p }
-  | "{:"		   { L_ATTR_DELIM lexbuf.Lexing.lex_curr_p }
-  | '{'            { LBRACE lexbuf.Lexing.lex_curr_p }
-  | '}'            { RBRACE lexbuf.Lexing.lex_curr_p }
-  | '<'            { LANGLE lexbuf.Lexing.lex_curr_p }
-  | '>'            { RANGLE lexbuf.Lexing.lex_curr_p }
-
-  | '.'            { DOT lexbuf.Lexing.lex_curr_p }
   | ','            { COMMA lexbuf.Lexing.lex_curr_p }
-  | ':'            { COLON lexbuf.Lexing.lex_curr_p }
   | ';'            { SEMI lexbuf.Lexing.lex_curr_p }
       
   | eof            { EOF }
@@ -194,7 +119,3 @@ and comment = parse
   | line_term      { Lexing.new_line lexbuf; comment lexbuf }
   | _              { comment lexbuf }
   | eof            { () }
-
-(* Local Variables: *)
-(* compile-command: "cd .. && make -k" *)
-(* End: *)

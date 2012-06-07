@@ -34,7 +34,7 @@
 %token <int> BVLIT
 
 %token IMPLIES IFF OR AND
-%token EQ NEQ LT GT LTE GTE SUB
+%token SEQ EQ NEQ LT GT LTE GTE SUB
 %token CONCAT PLUS MINUS AST DIV MOD
 %token NOT UNDER
 %token QSEP
@@ -110,13 +110,13 @@ declaration:
 		  { D.TypeCtor ($2,false,$3,$4) :: [] }
   | TYPE attributes_opt FINITE identifier identifiers_opt SEMI
 		  { D.TypeCtor ($2,true,$4,$5) :: [] }
-  | TYPE attributes_opt identifier identifiers_opt EQ type_ SEMI
+  | TYPE attributes_opt identifier identifiers_opt SEQ type_ SEMI
 		  { D.TypeSyn ($2,$3,$4,$6) :: [] }
   |	CONST attributes_opt unique_opt typed_identifiers order_spec SEMI
 	{ List.map (fun (c,t) -> D.Const ($2,$3,c,t,$5)) $4 }
 
   | FUNCTION attributes_opt identifier function_signature SEMI {
-		let ts, ps, rs = $4 in
+		let ts, ps, rs = $4 in 
 		D.Func ($2,$3,ts,ps,rs,None) :: []
 	}
   | FUNCTION attributes_opt identifier function_signature
@@ -213,7 +213,7 @@ var_decls_opt:
 
 var_decls:
 	var_decl { $1 }
-  | var_decl COMMA var_decls { $1 @ $3 }
+  | var_decl var_decls { $1 @ $2 }
 ;
 
 var_decl:

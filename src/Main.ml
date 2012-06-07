@@ -10,6 +10,7 @@ type ast =
 	| CP of CpAst.Program.t
 	| BP of BpAst.Program.t
 	| BPL of BplAst.Program.t
+	| PN of PnAst.Program.t
 
 let print_to_file f d =
 	match f with
@@ -52,7 +53,7 @@ let read_flags_file f =
 		close_in chan;
 	  	List.rev !lines
 	
-let filename_re = Str.regexp "^[^-].*\\.\\(cp\\|bp\\|bpl\\)$"
+let filename_re = Str.regexp "^[^-].*\\.\\(cp\\|bp\\|bpl\\|spec\\)$"
 let argument_re = Str.regexp "^-\\(.*\\)$"
 let flagsfile_re = Str.regexp "^flags \\(.*\\)$"
 	
@@ -96,6 +97,9 @@ let parse_program src =
 
 	else if Filename.check_suffix src ".bpl" then
 		BPL (ParsingUtils.parse_file BplParser.program_top BplLexer.token src)
+		
+	else if Filename.check_suffix src ".spec" then
+		PN (ParsingUtils.parse_file PnParser.program_top PnLexer.token src)
 
 	else failwith (sprintf "I don't know how to handle file `%s'." src)
 
@@ -104,6 +108,8 @@ let ptcb_re = Str.regexp "post-to-call-bfs \\([0-9]+\\) \\([0-9]+\\) \\(true\\|f
 let ptcbb_re = Str.regexp "post-to-call-bounded-bag \\([0-9]+\\)"
 let ptcbf_re = Str.regexp "post-to-call-bounded-fifo \\([0-9]+\\)"
 let lr_re = Str.regexp "lal-reps \\([0-9]+\\)"
+
+let pntobpl_re = Str.regexp "pn-to-bpl \\([0-9]+\\)"
 
 		  
 let _ =
@@ -153,6 +159,10 @@ let _ =
 			| CP p, "cp-to-bpl" -> BPL (CpToBpl.program p)
 			| CP p, "cp-to-bp" -> BP (CpToBp.program p)
 
+			| PN p, "pn-to-bpl" -> BPL (PnToBpl.program None p)
+			| PN p, s when Str.string_match pntobpl_re s 0 ->
+				BPL (PnToBpl.program (Some (int_of_string <| Str.matched_group 1 s)) p)
+
 			(* Back-end necessitites *)
 			| BP p, "prepare-for-back-end" -> 
 				BP (BpUtils.prepare_for_back_end p)
@@ -178,7 +188,12 @@ let _ =
 			| BPL p, s when Str.string_match print_to_file_re s 0 -> 
 				print_to_file (Str.matched_group 1 s) (BplAst.Program.print p);
 				BPL p
-			
+				
+			| PN p, "print" -> print_to_file "-" (PnAst.Program.print p); PN p
+			| PN p, s when Str.string_match print_to_file_re s 0 -> 
+				print_to_file (Str.matched_group 1 s) (PnAst.Program.print p);
+				PN p
+				
 			| CP p, "order-decls" -> CP (CpUtils.Program.order_declarations p)
 			
 			(* Concurrent translations *)
@@ -221,7 +236,8 @@ let _ =
 					( match pgm with 
 						| CP _ -> "Concurrent" 
 						| BP _ -> "Boolean"
-						| BPL _ -> "Boogie" );
+						| BPL _ -> "Boogie" 
+						| PN _ -> "Petri net");
 				pgm
 		 )
 		(parse_program src)
