@@ -9,7 +9,7 @@ OBJDIR := obj
 TESTDIR := $(SRC)/test
 TESTLOGS := test-log
 DEPENDDIR := obj/.depend
-SOURCEDIRS := $(SRC) $(SRC)/cp $(SRC)/bp $(SRC)/bpl $(TESTDIR)
+SOURCEDIRS := $(SRC) $(SRC)/cp $(SRC)/bp $(SRC)/bpl $(SRC)/pn $(TESTDIR)
 TOOLSDIR := tools
 
 BINDIR := bin
@@ -21,8 +21,10 @@ CAML_LIB = lib$(NAME)
 CAML_LIB_OBJ = \
 	Prelude PrettyPrinting \
 	Options ParsingUtils \
+	PnAst PnParser PnLexer \
 	BpAst BpParser BpLexer BpUtils \
 	BplAst BplParser BplLexer BplUtils BplTranslateUtils \
+	PnToBpl \
 	BplEscAsync \
 	BplAsyncToSeq \
 	CpAst CpParser CpLexer CpTyping CpUtils \
@@ -52,8 +54,8 @@ CAML_OPT_LD_FLAGS = -I $(LIBDIR)
 CAML_LD_LIBS = unix str nums
 
 MODULES = $(CAML_LIB_OBJ) Main $(CAML_TEST_OBJ)
-MLYS	= CpParser.mly BpParser.mly BplParser.mly
-MLLS	= CpLexer.mll BpLexer.mll BplLexer.mll
+MLYS	= CpParser.mly BpParser.mly BplParser.mly PnParser.mly
+MLLS	= CpLexer.mll BpLexer.mll BplLexer.mll PnLexer.mll
 
 TOOLS = 
 

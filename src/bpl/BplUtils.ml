@@ -74,6 +74,12 @@ end
 
 module Expression = struct
 	include Expression
+	
+	let sum es = 
+		match es with
+		| e::es -> List.fold_left (fun x y -> Bin (BinaryOp.Plus, x, y)) e es
+		| _ -> num 0
+	
 	let parse = ParsingUtils.parse_string
 		BplParser.expression_top
 		BplLexer.token
@@ -94,6 +100,10 @@ module Program = struct
 				  <| LabeledStatement.called (Procedure.stmts p)
 			| _ -> a
 		in foc [] a (D.Proc ([],"",p))
+	
+	let parse = ParsingUtils.parse_string
+		BplParser.program_top
+		BplLexer.token
 end
 
 module Sp = Specification
