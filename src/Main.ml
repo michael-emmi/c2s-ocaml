@@ -229,6 +229,17 @@ let _ =
 			| CP p, "ensure-well-formed" ->
 				CP (CpUtils.Program.ensure_well_formed p)
 				
+			| _, "help" ->
+				printf ( 
+					"ToDo: better help interface\n" ^^
+					"  Here are some options for now:\n" ^^
+					"  -print\n" ^^
+					"  -pn-to-bpl <k:int>\n" ^^
+					"  -post-to-call-dfs\n" ^^
+					"  -post-to-call-bfs <k:int>\n" ^^
+					"  ... plus many more undocumented! ;-)\n" );
+				pgm
+				
 			| _ -> 
 				Printf.eprintf 
 					"Translation `%s' undefined for %s programs.\n"
