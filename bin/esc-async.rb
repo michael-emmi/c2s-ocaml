@@ -17,7 +17,7 @@ end
 src = File.basename( input, ".bpl" )
 
 puts "Translating #{src}.bpl to #{src}.async.bpl"
-`#{c2s} #{input} -esc-async -prepare-for-back-end -print #{src}.async.bpl`
+`#{c2s} #{input} --esc-async --prepare-for-back-end --print #{src}.async.bpl`
 
 puts "Verifying #{src}.async.bpl"
 puts `#{boogie} #{src}.async.bpl`

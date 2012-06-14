@@ -20,7 +20,7 @@ end
 src = File.basename( input, ".spec" )
 
 puts "Translating #{src}.spec to #{src}.purse.bpl"
-`#{c2s} #{input} -pn-to-bpl #{purse_bound} -print #{src}.purse.bpl`
+`#{c2s} #{input} --pn-to-bpl #{purse_bound} --print #{src}.purse.bpl`
 
 puts "Verifying #{src}.purse.bpl"
 puts `#{boogie} #{src}.purse.bpl /loopUnroll:#{loop_unroll}`

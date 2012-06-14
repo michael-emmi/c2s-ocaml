@@ -263,7 +263,7 @@ and proc pgm ax n (ps,ts,reqs,ens,ds,ss) =
 	let reqs = List.map (expr << E.map_ident param_to_init) reqs
 	and ens = List.map expr ens in
 
-	let inline_depth = Options.get_int "recursion-depth" in
+	let inline_depth = Options.global_int "recursion-depth" in
 
 	(* NOTE: don't inline [main], nor any procedure marked as "modular". *)
 	let do_inline =

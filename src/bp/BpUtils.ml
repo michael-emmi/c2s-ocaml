@@ -61,24 +61,24 @@ let no_constrain_clauses =
 (** Apply whatever transformations necessary for the back-end in use. *) 
 let prepare_for_back_end p =
 	id
-	<< ( if Options.get_bool "reach-slic-error"
+	<< ( if Options.global_bool "reach-slic-error"
 		 then Program.map_stmts assert_to_slic_error
 		 else id )
-	<< ( if Options.get_bool "one-label-per-stmt"
+	<< ( if Options.global_bool "one-label-per-stmt"
 		 then Program.map_stmts one_label_per_stmt
 		 else id )
-	<< ( if Options.get_bool "one-target-per-goto"
+	<< ( if Options.global_bool "one-target-per-goto"
 		 then Program.map_stmts one_target_per_goto
 		 else id )
-	<< ( if Options.get_bool "no-ignore-returns"
+	<< ( if Options.global_bool "no-ignore-returns"
 		 then (fun p ->
 				   Program.map_stmts (no_ignore_returns p)
 				   <| Program.add_decls ["__junk"] p)
 		 else id )
-	<< ( if Options.get_bool "no-dead-stmts"
+	<< ( if Options.global_bool "no-dead-stmts"
 		 then Program.map_stmts no_dead_stmts
 		 else id )
-	<< ( if Options.get_bool "no-constrain-clauses"
+	<< ( if Options.global_bool "no-constrain-clauses"
 		 then Program.map_stmts no_constrain_clauses
 		 else id )
 	<| p

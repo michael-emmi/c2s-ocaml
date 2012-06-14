@@ -361,13 +361,17 @@ module String = struct
 		let k = String.length s in
 		if n > k then ""
 		else String.sub s n (k-n)
+		
+	let until s c = 
+		try sub s 0 (index s c)
+		with Not_found -> s
 
 	let trim cs s =
 		Str.global_replace (Str.regexp ("[" ^ cs ^ "]")) "" s
 
 	let matches re s =
 		Str.string_match (Str.regexp re) s 0
-
+		
 	let nth_index s n c =
 		let rec nth n i =
 			if n = 0 then i

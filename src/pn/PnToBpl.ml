@@ -74,9 +74,8 @@ let program k (vars,rules,init,target) =
 		axiom (forall m1, m2: marking, p: place :: sub(m1,m2)[p] == m1[p] - m2[p]);		
 	"
 	
-	@ ( match k with
-		| None -> [] 
-		| Some k -> [ D.Axiom ([],E.ident "K" |=| E.num k) ] )
+	@ ( if k < 0 then []
+		else [ D.Axiom ([],E.ident "K" |=| E.num k) ] )
 	
 	(* The list of variables *)
 	@ List.map (fun v -> 
