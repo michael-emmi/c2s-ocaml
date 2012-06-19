@@ -13,6 +13,7 @@ type ast =
 	| BP of BpAst.Program.t
 	| BPL of BplAst.Program.t
 	| PN of PnAst.Program.t
+	| CFG of Cfg.Grammar.t
 
 let print_to_file f d =
 	match f with
@@ -40,6 +41,9 @@ let parse_program src =
 		
 	else if Filename.check_suffix src ".spec" then
 		PN (ParsingUtils.parse_file PnParser.program_top PnLexer.token src)
+		
+	else if Filename.check_suffix src ".cfg" then
+		CFG (ParsingUtils.parse_file CfgParser.grammar_top CfgLexer.token src)
 
 	else failwith (sprintf "I don't know how to handle file `%s'." src)
 
@@ -55,6 +59,8 @@ let _ =
 			| CP p, ("cp-to-bp",_) -> BP (CpToBp.program p)
 
 			| PN p, ("pn-to-bpl",[Op.Int k]) -> BPL (PnToBpl.program k p)
+			
+			| CFG p, ("cfg-to-presburger",_) -> BPL (Parikh.image_of_cfg p)
 
 			(* Back-end necessitites *)
 			| BP p, ("prepare-for-back-end",_) -> BP (BpUtils.prepare_for_back_end p)
@@ -67,7 +73,8 @@ let _ =
 			| CP p, ("print",[Op.File f]) -> print_to_file f (CpAst.Program.print p); CP p
 			| BP p, ("print",[Op.File f]) -> print_to_file f (BpAst.Program.print p); BP p
 			| BPL p, ("print",[Op.File f]) -> print_to_file f (BplAst.Program.print p); BPL p
-			| PN p, ("print",[Op.File f]) -> print_to_file f (PnAst.Program.print p); PN p				
+			| PN p, ("print",[Op.File f]) -> print_to_file f (PnAst.Program.print p); PN p
+			| CFG p, ("print",[Op.File f]) -> print_to_file f (Cfg.Grammar.print p); CFG p
 				
 			| CP p, ("order-decls",_) -> CP (CpUtils.Program.order_declarations p)
 			
@@ -107,7 +114,8 @@ let _ =
 						| CP _ -> "Concurrent" 
 						| BP _ -> "Boolean"
 						| BPL _ -> "Boogie" 
-						| PN _ -> "Petri net");
+						| PN _ -> "Petri net"
+						| CFG _ -> "Context-free grammar");
 				pgm
 		 )
 		(parse_program src)

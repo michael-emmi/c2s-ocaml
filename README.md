@@ -22,7 +22,7 @@ To get going, simply build the sources..
 	   
 and run a demo, which parses the sample program and prints it back out
 
-	./bin/c2s src/test/cp/syntax-tutorial.cp
+	./bin/c2s src/test/cp/syntax-tutorial.cp --print -
 
 then look at the usage options 
 

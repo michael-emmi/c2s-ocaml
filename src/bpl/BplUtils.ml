@@ -140,13 +140,16 @@ module Operators = struct
 
 	let (!|) e = E.Not e
 	let (|=|) x y = E.Bin (Bop.Eq, x, y)
+	let (|!=|) x y = E.Bin (Bop.Neq, x, y)
 	let (|<|) x y = E.Bin (Bop.Lt, x, y)
+	let (|>|) x y = E.Bin (Bop.Gt, x, y)
 	let (|<=|) x y = E.Bin (Bop.Lte, x, y)
 	let (|>=|) x y = E.Bin (Bop.Gte, x, y)
 
 		
 	let (|+|) x y = E.Bin (Bop.Plus, x, y)
 	let (|-|) x y = E.Bin (Bop.Minus, x, y)
+	let (|*|) x y = E.Bin (Bop.Times, x, y)
 
 	let lift_to_ids op = curry (uncurry op << Tup2.mapp E.ident)
 

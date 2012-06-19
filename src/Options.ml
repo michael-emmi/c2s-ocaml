@@ -88,6 +88,7 @@ let supported_sources = [
 	"Boolean Programs", "bp";
 	"Boogie Programs", "bpl";
 	"Petri nets", "spec";
+	"Context-free grammars", "cfg";
 ]
 
 let flags : flag_spec list = [
@@ -103,6 +104,12 @@ let flags : flag_spec list = [
 	
 	"pn-to-bpl", [Int 0],
 	"Translate Petri net to Boogie program.",
+	["language"],
+	false;
+	
+	"cfg-to-presburger", [],
+	"Translate a Context-free grammar into a Presburger formula (in Boogie syntax)\n"
+    ^ "  which encodes the Parikh image of the grammar.",
 	["language"],
 	false;
 	
@@ -314,7 +321,7 @@ let read_flags_file f =
 		close_in chan;
 	  	List.rev !lines
 
-let filename_re = Str.regexp "^[^-][^-].*\\.\\(cp\\|bp\\|bpl\\|spec\\)$"
+let filename_re = Str.regexp "^[^-][^-].*\\.\\(cp\\|bp\\|bpl\\|spec\\|cfg\\)$"
 let argument_re = Str.regexp "^--\\(.*\\)$"
 let flagsfile_re = Str.regexp "^flags \\(.*\\)$"
 		
