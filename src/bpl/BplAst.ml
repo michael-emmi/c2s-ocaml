@@ -111,6 +111,7 @@ module rec Expression : sig
 	val disj: t list -> t
 	
 	val forall: (Identifier.t * Type.t) list -> t -> t
+	val exists: (Identifier.t * Type.t) list -> t -> t
 	
 	val map : (t -> t) -> t -> t
 	val fold : ('a -> t -> 'a) -> 'a -> t -> 'a
@@ -158,6 +159,7 @@ end = struct
 		| e :: es -> List.fold_left (fun e f -> Bin (Or, e, f)) e es
 		
 	let forall xs e = Q (Forall, [], xs, [], [], e)
+	let exists xs e = Q (Exists, [], xs, [], [], e)
 	
 	let rec map_fold fn a e = 
 		uncurry fn <| match e with

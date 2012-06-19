@@ -25,6 +25,9 @@ let image_of_cfg g =
 	
 	List.snoc []
 	<< (fun e -> D.Axiom ([], e))
+	<< E.exists (
+		List.map (fun p -> sprintf "y.p%n" (List.assoc p pidx), T.Int) (G.rules g)
+		@ List.map (fun a -> sprintf "z.%s" a, T.Int) (G.alphabet g @ G.variables g) )
 	<| E.conj (
 		
 		(* The number of times a variable is used is equal to the number
