@@ -77,6 +77,12 @@ let image_of_cfg g =
 				 << List.filter (P.produces a) 
 				 <| G.rules g ))
 			(G.alphabet g @ G.variables g)
+			
+		@ List.map (fun p -> 
+			(pvar p |>| E.num 0) |=>| (zvar (P.lhs p) |>| E.num 0) )
+			(G.rules g)
+			
+		@ [ zvar (G.start g) |=| E.num 0 ]
 	)
 
 	
