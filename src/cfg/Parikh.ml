@@ -34,8 +34,14 @@ let image_of_cfg g =
 		   of times it is produced. *)
 		List.map (fun a -> 
 			E.num (if G.start g = a then 1 else 0)
-			|+| (E.sum << List.map (fun p -> E.num (P.produced a p) |*| pvar p) <| G.rules g)
-			|-| (E.sum << List.map pvar << List.filter (P.consumes a) <| G.rules g)
+			|+| ( E.sum 
+				  << List.map (fun p -> E.num (P.produced a p) |*| pvar p) 
+				  << List.filter (P.produces a)
+				  <| G.rules g)
+			|-| ( E.sum 
+				  << List.map pvar 
+				  << List.filter (P.consumes a) 
+				  <| G.rules g)
 			|=| E.num 0 )
 		(G.variables g)
 		
@@ -44,9 +50,10 @@ let image_of_cfg g =
 		   a given production. *)
 		@ List.map (fun a ->
 			svar a 
-			|=| E.sum (
-				List.map (fun p -> E.num (P.produced a p) |*| pvar p) 
-				<| G.rules g) ) 
+			|=| ( E.sum
+				  << List.map (fun p -> E.num (P.produced a p) |*| pvar p)
+				  << List.filter (P.produces a)
+				  <| G.rules g ) ) 
 			(G.alphabet g)
 			
 		(* Each used symbol is at reached. *)

@@ -26,12 +26,13 @@ let line_term = ['\n']
 
 let unicode_letter = ['a'-'z' 'A'-'Z']
 let unicode_digit = ['0'-'9']
+let other_symbol = ['_' '.' '$' '#' '\'' '`' '~' '^' '\\' '?']
 
 (* let unicode_escape_sequence = [ ] *)
 (* let unicode_combining_mark = [ ] *)
 (* let unicode_connector_punctuation = [ ] *)
 
-let symbol_start = unicode_letter | '$' | '_' | '\'' 
+let symbol_start = unicode_letter | other_symbol
 (* | unicode_escape_sequence *)
 
 let symbol_part = symbol_start | unicode_digit
