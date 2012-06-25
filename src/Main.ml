@@ -61,6 +61,7 @@ let _ =
 			| PN p, ("pn-to-bpl",[Op.Int k]) -> BPL (PnToBpl.program k p)
 			
 			| CFG p, ("cfg-to-presburger",_) -> BPL (Parikh.image_of_cfg p)
+			| BPL p, ("violin-instrument", [Op.Int k]) -> BPL (BplViolin.instrument k p)
 
 			(* Back-end necessitites *)
 			| BP p, ("prepare-for-back-end",_) -> BP (BpUtils.prepare_for_back_end p)

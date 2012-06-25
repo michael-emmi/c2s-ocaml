@@ -73,7 +73,7 @@ let flag_re prefix f =
 		(fun a -> match a with
 			| Bool b -> " \\(true\\|false\\)"
 			| Int i -> " \\([0-9]+\\)"
-			| String s -> " \\(\"[^\"]*\"\\)"
+			| String s -> " \\([^\"]*\\)"
 			| File f -> " \\([^ ]*\\)" )
 	<| args f
 
@@ -110,7 +110,12 @@ let flags : flag_spec list = [
 	"cfg-to-presburger", [],
 	"Translate a Context-free grammar into a Presburger formula (in Boogie syntax)\n"
     ^ "  which encodes the Parikh image of the grammar.",
-	["language"],
+	["language"; "violin"],
+	false;
+	
+	"violin-instrument", [Int 0],
+	"New secret Violin option.",
+	["violin"],
 	false;
 	
 	"print", [File "-"],

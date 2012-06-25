@@ -535,7 +535,7 @@ end = struct
 		
 	open PrettyPrinting
 	let print (ids,s) =
-		sep	(
+		vcat (
 			List.map (fun l -> Identifier.print l <-> colon) ids
 			@ [Statement.print s] )
 	let print_seq = vcat << List.map print
@@ -881,12 +881,12 @@ module Program = struct
 		
 		List.append new_global_decls
 		<< List.flatten << map (
-			function D.Proc (ax,n,((ps,ts,rs,es,ds,ss) as p)) ->
+			function D.Proc (ax,n,((ts,ps,rs,es,ds,ss) as p)) ->
 				let ps' = ps @ new_proc_params (n,p)
-				and ts' = ts @ new_proc_rets (n,p)
+				and rs' = rs @ new_proc_rets (n,p)
 				and ds' = ds @ new_local_decls (n,p)
-				and ss' = proc_body_prefix (n,p) @ ss @ proc_body_prefix (n,p)
-				in D.Proc (ax,n,(ps',ts',rs,es,ds',ss')) :: []
+				and ss' = proc_body_prefix (n,p) @ ss @ proc_body_suffix (n,p)
+				in D.Proc (ax,n,(ts,ps',rs',es,ds',ss')) :: []
 			| d -> d :: [] )
 		<< List.flatten << map replace_global_decls
 		<< map_stmts (per_stmt_map)

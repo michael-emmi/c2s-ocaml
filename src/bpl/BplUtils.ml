@@ -111,6 +111,7 @@ module S = Statement
 module Ls = LabeledStatement
 module D = Declaration
 module E = Expression
+module T = Type
 
 
 module Operators = struct

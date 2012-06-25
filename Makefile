@@ -26,6 +26,7 @@ CAML_LIB_OBJ = \
 	BpAst BpParser BpLexer BpUtils \
 	BplAst BplParser BplLexer BplUtils BplTranslateUtils \
 	Parikh \
+	BplViolin \
 	PnToBpl \
 	BplEscAsync \
 	BplAsyncToSeq \
