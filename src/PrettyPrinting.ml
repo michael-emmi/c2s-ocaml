@@ -154,8 +154,6 @@ let nest n d ff =
 
 let hang d n e = sep [d; nest n e]
 
-let indent n d = nest (n-1) (text (String.make (n-1) ' ') <+> d)
-
 let break ff =
   pp_print_newline ff ()
   
@@ -215,9 +213,9 @@ let render_no_breaks d =
   pp_print_flush ff ();
   Buffer.contents b
     
-
-
 let is_empty = (=) "" << render
+
+let indent n d = if is_empty d then empty else nest (n-1) (text (String.make (n-1) ' ') <+> d)
 
 let consolidate f d e =
     if is_empty d then e

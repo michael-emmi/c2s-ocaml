@@ -13,65 +13,109 @@ let stage_id = "A2S"
 
 (** An encoding of the depth-first task-scheduling order, a restriction of 
  * the unordered (i.e., "bag") semantics.*)
-let post_to_call_dfs p =
+let post_to_call_dfs pgm =
 
-	let guess = fun x -> sprintf "%s__%s__guess" x stage_id
-	and saved = fun x-> sprintf "%s__%s__saved" x stage_id
-	and next = fun x-> sprintf "%s__%s___next" x stage_id
-	and next_init = fun x-> sprintf "%s__%s__next_init" x stage_id
+	let guess = fun x -> sprintf "%s.%s.guess" x stage_id
+	and save = fun x-> sprintf "%s.%s.save" x stage_id
+	and next = fun x-> sprintf "%s.%s.next" x stage_id
+	and init = fun x-> sprintf "%s.%s.0" x stage_id
+	and err_flag = sprintf "%s.err" stage_id
+	and main_proc = sprintf "Main.%s" stage_id
 	in
 
 	let gs_decls = 
-		List.filter ((=) "var" << D.kind) (Program.decls p) in
-
-	let extra_global_decls =
-		List.map (D.rename next) gs_decls
-		@ List.map (D.to_const << D.rename next_init) gs_decls
-
-	and extra_proc_decls =
-		List.map (D.rename saved) gs_decls
-		@ List.map (D.rename guess) gs_decls
+		List.filter ((=) "var" << D.kind) (Program.decls pgm) in
+	
+	let next_decls = List.map (D.rename next) gs_decls
+	and init_decls = List.map (D.to_const << D.rename init) gs_decls
+	and guess_decls = List.map (D.rename guess) gs_decls
+	and save_decls = List.map (D.rename save) gs_decls
 	in
 
 	let gs = List.map D.name gs_decls in
-	let saved_gs = List.map saved gs
+	let save_gs = List.map save gs
 	and next_gs = List.map next gs
-	and init_next_gs = List.map next_init gs
+	and init_gs = List.map init gs
 	and guess_gs = List.map guess gs
 	in
 
 	let init_predicate = 
 		E.conj << List.map (uncurry ($=$))
-		<| List.combine init_next_gs next_gs
+		<| List.combine gs init_gs
+		
+	and init_assigns =
+		next_gs $:=$ guess_gs
 
 	and validity_predicate = 
 		E.conj << List.map (uncurry ($=$))
-		<| List.combine init_next_gs gs
+		<| List.combine gs guess_gs
 	in
+	
+
+	let new_decls = 
+		
+		Declaration.parse <| sprintf
+			"var %s: bool;
+			 procedure %s () 
+			 {
+			    %s := false;
+				assume %s;
+				%s 
+				call Main();
+				assume %s;
+				assert !%s;
+				return;
+			 }"
+			err_flag
+			main_proc
+			err_flag
+			(E.to_string init_predicate)
+			(Ls.to_string init_assigns)
+			(E.to_string validity_predicate)
+			err_flag
+			
+	in
+	
+	
+	let is_async_call = function
+	| (_, S.Call (ax,_,_,_)) when A.has "async" ax -> true
+	| _ -> false
+	in
+	
 
 	let translate_post s =
 		match s with
 		
-		| ls, S.Call (ax,n,ps,[]) when A.has "async" ax ->
-
+		| ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
+			if rs != [] then
+				warn <| 
+				sprintf "Found async call (to procedure `%s') with assignments." n;
+			
 			Ls.add_labels ls [
-			  saved_gs $:=$ gs;
+			  save_gs $:=$ gs;
 			  gs $:=$ next_gs;
 			  guess_gs $:=?$ ();
 			  next_gs $:=$ guess_gs;
 
-			  Ls.stmt <| S.Call (A.strip "async" ax, n, ps, []);
+			  Ls.stmt <| S.Call (A.strip "async" ax, n, ps, rs);
 
 			  Ls.stmt <| S.Assume
 					  ( E.conj (List.map (fun g -> g $=$ guess g) gs) ) ;
 
-			  gs $:=$ saved_gs;
+			  gs $:=$ save_gs;
 			  (* Ls.stmt <| S.Dead (saved_gs @ guess_gs); *)
 		  ]	
 			
-	    | _, S.Call (ax,_,_,_) when A.has "async" ax ->
-			failwith "Found async call with assignments."
 			
+		| _ -> [s]
+		
+		
+	and translate_assert s =
+		match s with
+		| ls, S.Assert e -> 
+			Ls.add_labels ls [ 
+				[E.ident err_flag] 
+				|:=| [ E.ident err_flag ||| !| e] ]
 		| _ -> [s]
 		
 	and last_gval gs e =
@@ -81,42 +125,41 @@ let post_to_call_dfs p =
 		| _ -> e
 	
 	in
+	
 
+	
 	(if List.length gs = 0 then
 		Program.translate
 			~per_stmt_map: 
 				(fun _ -> function
-				   | ls, S.Call (ax,n,ps,[]) when A.has "async" ax ->
-					 	(ls, S.Call (A.strip "async" ax,n,ps,[]))::[]
-				   | _, S.Call (ax,_,_,_) when A.has "async" ax ->
-						failwith "Found async call with assignments."
+				   | ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
+						if rs != [] then
+							warn <| 
+							sprintf "Found async call (to procedure `%s') with assignments." n;
+					 	(ls, S.Call (A.strip "async" ax,n,ps,rs))::[]
 				   | s -> s :: [])
 		<< id
 	else
 		Program.translate
-			~new_global_decls: extra_global_decls
-			~per_stmt_map: (const translate_post)
-			~proc_body_prefix:
-				(fun (n,_) -> 
-					if n = Tr.init_proc then
-						[ Ls.assume init_predicate ]
-					else if n = Tr.validate_proc then
-						[ Ls.assume validity_predicate ]
-					else [] )
-			~new_local_decls:
-				( fun (_,p) -> 
-					if Ls.contains_rec 
-						(function (_, S.Call (ax,_,_,_)) 
-						          when A.has "async" ax -> true 
-						 | _ -> false) 
-						(Procedure.stmts p)
-					then extra_proc_decls
-					else [] )
+			~new_global_decls: ( init_decls @ next_decls @ new_decls )
+			~per_stmt_map: (const (translate_post <=< translate_assert))
+								
+			~new_local_decls: (fun (n,p) -> 
+				if n = main_proc then guess_decls
+				else match Program.find_proc pgm n with
+				| Some p when Ls.contains_rec is_async_call (Procedure.stmts p) ->
+					save_decls @ guess_decls
+				| _ -> [] )
+					
 			~per_expr_map: 
 				(fun p -> 
 					if p = Tr.check_proc then last_gval gs
 					else id)
+			~replace_global_decls: 
+				( function D.Proc (ax,n,p) -> 
+					[ D.Proc (A.add (A.num "inline" 1) ax, n, p) ]
+				  | d -> d :: [] )
 		<< id 
 	)
-	<| p
+	<| pgm
 	

@@ -33,6 +33,8 @@ let fresh_int_fn () =
   let cur = ref 0 in
   fun () -> incr cur; !cur
 
+let warn = Printf.eprintf "WARNING: %s\n"
+
 let rec ntimes f x n =
 	if n < 1 then x
 	else ntimes f (f x) (n-1)

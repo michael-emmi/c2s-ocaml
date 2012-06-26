@@ -227,6 +227,7 @@ and Attribute : sig
 	val string : string -> string -> t
 
 	val name : t -> string
+	val add : t -> t list -> t list
 	val has : string -> t list -> bool
 	val strip : string -> t list -> t list
 	val to_string : t -> string
@@ -241,6 +242,7 @@ end = struct
 
 	let name = fst
 	let has id = List.exists (fun (a,_) -> a = id)
+	let add (id,vs) ax = if not (has id ax) then List.cons (id,vs) ax else ax
 	let strip id = List.filter ((<>) id << fst)
 
 	open PrettyPrinting
@@ -632,7 +634,7 @@ end = struct
 			  | _ -> indent indent_size (
 					keyword "returns" <+> parens (Type.print_typed_ids rs) ))
 		<-> ( match ds,ss with [],[] -> semi | _ -> empty )
-			$+$ indent indent_size (Specification.print_seq es)
+			$-$ indent indent_size (Specification.print_seq es)
 			$-$ ( match ds,ss with [],[] -> empty
 				  | _ -> lbrace
 						$-$ ( match ds with [] -> empty 
