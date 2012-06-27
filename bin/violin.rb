@@ -9,7 +9,7 @@ cleanup = false
 puts "Violin version #{@version}"
 
 def usage()
-    puts "usage: violin.rb <impl>.bpl <spec>.cfg <K>"
+    puts "usage: violin.rb <impl>.bpl <K>"
 end
 
 def check_file(file,kind,ext)
