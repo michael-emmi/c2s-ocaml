@@ -34,9 +34,9 @@ def cfg_source(file)
 end
 
 impl = bpl_source(ARGV[0])
-spec = cfg_source(ARGV[1])
-bound = ARGV[2].to_i
-if not ARGV[2] then
+# spec = cfg_source(ARGV[1])
+bound = ARGV[1].to_i
+if not ARGV[1] then
     puts "Please give a numeric bound."
     usage()
     exit
@@ -44,12 +44,20 @@ end
 
 name = File.basename(impl,".bpl")
 
-puts "Translating #{spec}.cfg to #{spec}.parikh.bpl"
-`#{c2s} #{spec} --cfg-to-presburger --print #{name}.parikh.bpl`
+### Translate the specification grammar to a Presburger formula
+# puts "Translating #{spec}.cfg to #{spec}.parikh.bpl"
+# `#{c2s} #{spec} --cfg-to-presburger --print #{name}.parikh.bpl`
 
-puts "Instrumenting #{impl}.bpl"
-`#{c2s} #{impl} --violin-instrument #{bound} --print #{name}.inst.bpl`
-`cat #{name}.parikh.bpl #{name}.inst.bpl > #{name}.violin.bpl`
+### Instrumentation for linearizability w.r.t. specification checking
+# puts "Instrumenting #{impl}.bpl"
+# `#{c2s} #{impl} --violin-instrument #{bound} --print #{name}.inst.bpl`
+# `cat #{name}.parikh.bpl #{name}.inst.bpl > #{name}.violin.bpl`
+
+puts "Sequentializing #{impl} with #{bound}-delay translation."
+`#{c2s} #{impl} --delay-bounding #{bound} --prepare-for-back-end --print #{name}.#{bound}-delay.bpl`
+
+puts "Verifying #{name}.#{bound}-delay.bpl with Boogie..."
+puts `#{boogie} #{name}.#{bound}-delay.bpl /stratifiedInline:1 /extractLoops`
 
 # if cleanup then
 #     File.delete( "#{src}.async.bpl" )
