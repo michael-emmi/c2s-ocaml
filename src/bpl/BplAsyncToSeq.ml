@@ -64,7 +64,7 @@ let delay_bounding k pgm =
 		D.Const ([], false, rounds_const, T.Int, ()) ;
 		D.Axiom ([], E.ident rounds_const |=| E.num rounds) ;
 		D.Var ([], err_flag, T.Bool, None) ;
-		D.Proc ([], top_proc, (
+		D.Proc ([A.unit "entrypoint"], top_proc, (
 			[],[],[],[],
 			guess_decls,
 			(

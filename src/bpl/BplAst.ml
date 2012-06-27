@@ -222,6 +222,7 @@ end
 
 and Attribute : sig
 	type t = Identifier.t * ((Expression.t, string) either) list
+	val unit: string -> t
 	val bool : string -> bool -> t
 	val num : string -> int -> t
 	val string : string -> string -> t
@@ -236,6 +237,7 @@ and Attribute : sig
 	val print_seq : t list -> PrettyPrinting.doc
 end = struct
 	type t = Identifier.t * ((Expression.t, string) either) list
+	let unit id = id, []
 	let bool id b = id, [Left (Expression.bool b)]
 	let num id n = id, [Left (Expression.num n)]
 	let string id s = id, [Right s]
