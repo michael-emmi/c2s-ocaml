@@ -133,6 +133,11 @@ let flags : flag_spec list = [
 	["low-level"],
 	false;
 	
+	"delay-bounding", [Int 0],
+	"Delay-bounded sequentialization.",
+	["async"],
+	false;
+	
 	"esc-async", [],
 	"Translation for deductive verification.",
 	["async"],

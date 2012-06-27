@@ -16,6 +16,15 @@ module Statement = struct
 	let skip = Call ([A.bool "skip" true], "skip", [], [])
 	let yield = Call ([A.bool "yield" true], "yield", [], [])
 	let post n ps = Call ([A.bool "async" true],n,ps,[])
+	
+	let is_yield = 
+		function Call (ax,"yield",[],[]) when A.has "yield" ax -> true
+		| _ -> false
+
+	let is_async = 
+		function Call (ax,_,_,_) when A.has "async" ax -> true
+		| _ -> false
+
 end
 
 module LabeledStatement = struct
@@ -29,16 +38,21 @@ module LabeledStatement = struct
 	module S = Statement
 	
 	let skip = stmt (S.skip)
+	let havoc xs = stmt (S.Havoc xs)
 	let assign xs es = stmt (S.Assign (xs,es))
 	let assert_ e = stmt (S.Assert e)
 	let assume e = stmt (S.Assume e)
 	let ifthenelse e ss ts = stmt (S.If (e,ss,ts))
-	let ifthen e ss = ifthenelse e ss [skip]
+	let ifthen e ss = ifthenelse e ss []
+	let ifstar ss = ifthen None ss
 	let whiledo e es ss = stmt (S.While (e,es,ss))
 	let call p ps xs = stmt (S.Call ([],p,ps,xs))
 	let return = stmt S.Return
 	let post p ps = stmt (S.post p ps)
 	let yield = stmt (S.yield)
+	
+	let is_yield (_,s) = S.is_yield s
+	let is_async (_,s) = S.is_async s
 
 	let incr e = 
 		assign 
@@ -74,6 +88,8 @@ end
 
 module Expression = struct
 	include Expression
+	
+	let sel e es = Sel (e,es)
 	
 	let sum es = 
 		match es with
@@ -123,11 +139,18 @@ module Operators = struct
 	module S = Statement
 	module Ls = LabeledStatement
 	module Bop = BinaryOp
+	
+	let (|:=|) x e = [ Ls.assign [Lv.from_expr x] [e] ]
+	let (|::=|) xs = 
+		List.flatten << List.map (uncurry (|:=|)) << List.combine xs
+	
+	let ($:=$) x y = E.ident x |:=| E.ident y
+	let ($::=$) xs ys = List.map E.ident xs |::=| List.map E.ident ys
 
-	let (|:=|) xs es = Ls.assign (List.map Lv.from_expr xs) es
-	let ($:=$) xs ys = List.map E.ident xs |:=| List.map E.ident ys
+	(* let (|:=|) xs es = Ls.assign (List.map Lv.from_expr xs) es *)
+	(* let ($:=$) xs ys = List.map E.ident xs |:=| List.map E.ident ys *)
 	(* let ($:=?$) xs () = Ls.assign (List.map Lv.ident xs) (E.choice xs) *)
-	let ($:=?$) xs () = Ls.stmt (S.Havoc xs)
+	let ($:=?$) xs () = [ Ls.stmt (S.Havoc xs) ]
 
 	let (|&|) e f = E.conj [e;f]
 	let (|||) e f = E.disj [e;f]
@@ -155,6 +178,7 @@ module Operators = struct
 	let lift_to_ids op = curry (uncurry op << Tup2.mapp E.ident)
 
 	let ($=$) = lift_to_ids (|=|)
+	let ($==$) xs = E.conj << List.map (uncurry ($=$)) << List.combine xs
 	let ($<$) = lift_to_ids (|<|)
 	let ($>=$) = lift_to_ids (|>=|)
 end

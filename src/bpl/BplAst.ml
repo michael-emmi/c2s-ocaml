@@ -297,8 +297,9 @@ module Lvalue = struct
 		function Sel (lv,es) -> 
 			let a, lv = map_fold_exprs fn a lv in
 			let a, es = List.map_fold_left (E.map_fold fn) a es in
-			a, Sel (lv,es)
-		| lv -> a, lv
+			Tup2.map id from_expr << fn a <| E.Sel (to_expr lv, es)
+		| lv -> 
+			Tup2.map id from_expr << fn a << to_expr <| lv
 		
 	let map_exprs fn = map_fold_to_map map_fold_exprs fn
 
