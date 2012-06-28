@@ -66,8 +66,8 @@ module LabeledStatement = struct
 	let modifies =
 		fold_stmts
 			( fun ms s -> match s with
-			  | [], Assign (xs,_) -> List.union (List.map Lvalue.name xs) ms
-			  | [], Call (_,_,_,xs) -> List.union xs ms
+			  | _, Assign (xs,_) -> List.union (List.map Lvalue.name xs) ms
+			  | _, Call (_,_,_,xs) -> List.union xs ms
 			  | _ -> ms )
 			[]
 
