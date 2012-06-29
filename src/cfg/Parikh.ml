@@ -83,7 +83,9 @@ let image_of_cfg g =
 			(G.alphabet g @ G.variables g)
 			
 		@ List.map (fun p -> 
-			(pvar p |>| E.num 0) |=>| (zvar (P.lhs p) |>| E.num 0) )
+			if P.lhs p != G.start g then 
+				(pvar p |>| E.num 0) |=>| (zvar (P.lhs p) |>| E.num 0)
+			else E.bool true )
 			(G.rules g)
 			
 		@ [ zvar (G.start g) |=| E.num 0 ]
