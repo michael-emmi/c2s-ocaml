@@ -122,7 +122,7 @@ let delay_bounding k pgm =
 		match s with
 		
 		| ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
-			if rs != [] then
+			if rs <> [] then
 				warn <| 
 				sprintf "Found async call (to procedure `%s') with assignments." n;
 			
@@ -155,7 +155,7 @@ let delay_bounding k pgm =
 			~per_stmt_map: 
 				(fun _ -> function
 				   | ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
-						if rs != [] then
+						if rs <> [] then
 							warn <| 
 							sprintf "Found async call (to procedure `%s') with assignments." n;
 					 	(ls, S.Call (A.strip "async" ax,n,ps,rs))::[]

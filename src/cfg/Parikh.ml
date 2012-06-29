@@ -58,14 +58,18 @@ let image_of_cfg g =
 				  << List.map (fun p -> E.num (P.produced a p) |*| pvar p)
 				  << List.filter (P.produces a)
 				  <| G.rules g ) ) 
-			(G.alphabet g)
+			(G.alphabet g)			
 			
-		(* Each used symbol is at reached. *)
+		(* The start variable is reachable in 0 steps. *)
+		@ [ zvar (G.start g) |=| E.num 0 ]
+			
+		(* Each symbol used is reachable. *)
 		@ List.map (fun a -> 
 			(svar a |!=| E.num 0) |=>| (zvar a |>| E.num 0) ) 
 			(G.alphabet g)
 			
-		(* *)
+		(* Each variable that is reachable is reached in one more step
+		   than some variable which produces it. *)
 		@ List.map (fun a -> 
 			(zvar a |!=| E.num 0) 
 			|=>| (E.disj 
@@ -82,13 +86,17 @@ let image_of_cfg g =
 				 <| G.rules g ))
 			(G.alphabet g @ G.variables g)
 			
+		(* The LHS of every used production must be reachable. *)
 		@ List.map (fun p -> 
-			if P.lhs p != G.start g then 
+			if P.lhs p <> G.start g then 
 				(pvar p |>| E.num 0) |=>| (zvar (P.lhs p) |>| E.num 0)
 			else E.bool true )
 			(G.rules g)
 			
-		@ [ zvar (G.start g) |=| E.num 0 ]
+		(* All values are non-negative. *)
+		@ List.map (fun a -> svar a |>=| E.num 0) (G.alphabet g @ G.variables g)
+		@ List.map (fun a -> zvar a |>=| E.num 0) (G.alphabet g @ G.variables g)
+		@ List.map (fun p -> pvar p |>=| E.num 0) (G.rules g)
 	)
 
 	
