@@ -31,6 +31,8 @@ let delay_bounding k pgm =
 	| E.Id x when List.mem x gs -> E.sel (E.ident x) [E.ident "k"]
 	| e -> e
 	in
+	
+	let delay_label_idx = ref 0 in
 
 	let guess = fun x -> sprintf "%s.%s.guess" x stage_id
 	and save = fun x-> sprintf "%s.%s.save" x stage_id
@@ -41,6 +43,9 @@ let delay_bounding k pgm =
 	and round_idx = sprintf "k"
 	and init_round_idx = sprintf "k.0"
 	and top_proc = sprintf "Main.%s" stage_id
+	and delay_label _ = 
+		incr delay_label_idx;
+		sprintf "%s.DELAY.%n" stage_id (!delay_label_idx)
 	in
 
 	let gs_decls = 
@@ -99,10 +104,11 @@ let delay_bounding k pgm =
 	
 	let translate_yield s =
 		if Ls.is_yield s then [
-			Ls.ifstar [
-				Ls.assume (E.ident round_idx |<| E.num (rounds-1)) ;
-				Ls.incr (E.ident round_idx)
-			]
+			Ls.ifstar (
+				Ls.add_labels [delay_label ()]
+					[Ls.assume (E.ident round_idx |<| E.num (rounds-1))]
+				@ [Ls.incr (E.ident round_idx)]
+			)
 		] else [s]
 
 	and translate_call s =
