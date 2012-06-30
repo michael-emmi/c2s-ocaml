@@ -3,7 +3,7 @@
 @version = "0.1"
 
 c2s = "c2s"
-boogie = "Boogie"
+boogie = "mono ~/Code/Tools/boogie-source/Binaries/Boogie.exe"
 cleanup = false
 
 puts "Violin version #{@version}"
@@ -57,7 +57,9 @@ puts "Sequentializing #{impl} with #{bound}-delay translation."
 `#{c2s} #{impl} --delay-bounding #{bound} --prepare-for-back-end --print #{name}.#{bound}-delay.bpl`
 
 puts "Verifying #{name}.#{bound}-delay.bpl with Boogie..."
+t0 = Time.now
 puts `#{boogie} #{name}.#{bound}-delay.bpl /stratifiedInline:1 /extractLoops`
+puts "Boogie finished in #{Time.now - t0}s."
 
 # if cleanup then
 #     File.delete( "#{src}.async.bpl" )

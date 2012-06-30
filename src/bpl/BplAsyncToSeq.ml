@@ -15,6 +15,7 @@ let stage_id = "A2S"
  * the unordered (i.e., "bag") semantics.*)
 let delay_bounding k pgm =
 	
+	let delays = k in
 	let rounds = k+1 in	
 	let main_proc = "Main" in
 	
@@ -40,6 +41,8 @@ let delay_bounding k pgm =
 	and init = fun x-> sprintf "%s.%s.0" x stage_id
 	and err_flag = sprintf "%s.err" stage_id
 	and rounds_const = sprintf "%s.ROUNDS" stage_id
+	and delays_const = sprintf "%s.DELAYBOUND" stage_id
+	and delays_var = sprintf "%s.delays" stage_id
 	and round_idx = sprintf "k"
 	and init_round_idx = sprintf "k.0"
 	and top_proc = sprintf "Main.%s" stage_id
@@ -68,12 +71,16 @@ let delay_bounding k pgm =
 	let new_decls = [
 		D.Const ([], false, rounds_const, T.Int, ()) ;
 		D.Axiom ([], E.ident rounds_const |=| E.num rounds) ;
+		D.Const ([], false, delays_const, T.Int, ()) ;
+		D.Axiom ([], E.ident delays_const |=| E.num delays) ;
+		D.Var ([], delays_var, T.Int, None) ;
 		D.Var ([], err_flag, T.Bool, None) ;
 		D.Proc ([A.unit "entrypoint"], top_proc, (
 			[],[],[],[],
 			guess_decls,
 			(
-				(E.ident err_flag |:=| E.bool false)
+				(E.ident delays_var |:=| E.num 0)
+				@ (E.ident err_flag |:=| E.bool false)
 				@ [ Ls.assume (gs $==$ init_gs) ]
 				@ (next_gs $::=$ guess_gs)
 				@ [ Ls.call main_proc [E.num 0] [];
@@ -105,9 +112,11 @@ let delay_bounding k pgm =
 	let translate_yield s =
 		if Ls.is_yield s then [
 			Ls.ifstar (
-				Ls.add_labels [delay_label ()]
-					[Ls.assume (E.ident round_idx |<| E.num (rounds-1))]
-				@ [Ls.incr (E.ident round_idx)]
+				Ls.add_labels [delay_label ()] [
+					Ls.assume (E.ident round_idx |<| E.num (rounds-1)) ;
+					Ls.assume (E.ident delays_var |<| E.num (delays)) ;
+					Ls.incr (E.ident round_idx) ; 
+				    Ls.incr (E.ident delays_var) ]
 			)
 		] else [s]
 
