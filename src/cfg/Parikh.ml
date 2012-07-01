@@ -94,7 +94,7 @@ let image_of_cfg g =
 			(G.rules g)
 			
 		(* All values are non-negative. *)
-		@ List.map (fun a -> svar a |>=| E.num 0) (G.alphabet g @ G.variables g)
+		@ List.map (fun a -> svar a |>=| E.num 0) (G.alphabet g)
 		@ List.map (fun a -> zvar a |>=| E.num 0) (G.alphabet g @ G.variables g)
 		@ List.map (fun p -> pvar p |>=| E.num 0) (G.rules g)
 	)
