@@ -230,6 +230,7 @@ and Attribute : sig
 	val name : t -> string
 	val add : t -> t list -> t list
 	val has : string -> t list -> bool
+	val get : string -> t list -> ((Expression.t, string) either) list
 	val strip : string -> t list -> t list
 	val to_string : t -> string
 
@@ -244,6 +245,7 @@ end = struct
 
 	let name = fst
 	let has id = List.exists (fun (a,_) -> a = id)
+	let get id = List.assoc id
 	let add (id,vs) ax = if not (has id ax) then List.cons (id,vs) ax else ax
 	let strip id = List.filter ((<>) id << fst)
 

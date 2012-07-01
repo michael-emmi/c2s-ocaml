@@ -20,7 +20,15 @@ module Statement = struct
 	let is_yield = 
 		function Call (ax,"yield",[],[]) when A.has "yield" ax -> true
 		| _ -> false
-
+		
+	let is_short_yield =
+		function Call (ax,"yield",[],[]) when A.has "yield" ax -> begin
+			match A.get "yield" ax with
+			| [Left e] when e = Expression.num 1 -> true
+			| _ -> false
+		end 
+		| _ -> false
+		
 	let is_async = 
 		function Call (ax,_,_,_) when A.has "async" ax -> true
 		| _ -> false
@@ -42,16 +50,18 @@ module LabeledStatement = struct
 	let assign xs es = stmt (S.Assign (xs,es))
 	let assert_ e = stmt (S.Assert e)
 	let assume e = stmt (S.Assume e)
-	let ifthenelse e ss ts = stmt (S.If (e,ss,ts))
+	let ifthenelse e ss ts = stmt (S.If (Some e,ss,ts))
 	let ifthen e ss = ifthenelse e ss []
-	let ifstar ss = ifthen None ss
+	let ifstar ss = stmt (S.If (None,ss,[]))
 	let whiledo e es ss = stmt (S.While (e,es,ss))
+	let whilestar ss = stmt (S.While (None,[],ss))
 	let call p ps xs = stmt (S.Call ([],p,ps,xs))
 	let return = stmt S.Return
 	let post p ps = stmt (S.post p ps)
 	let yield = stmt (S.yield)
 	
 	let is_yield (_,s) = S.is_yield s
+	let is_short_yield (_,s) = S.is_short_yield s
 	let is_async (_,s) = S.is_async s
 
 	let incr e = 

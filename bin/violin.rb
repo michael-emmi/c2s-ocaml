@@ -3,8 +3,9 @@
 @version = "0.1"
 
 c2s = "c2s"
-boogie = "mono ~/Code/Tools/boogie-source/Binaries/Boogie.exe"
+boogie = "Boogie"
 cleanup = false
+rec_bound = 1
 
 puts "Violin version #{@version}"
 
@@ -35,7 +36,9 @@ end
 
 impl = bpl_source(ARGV[0])
 # spec = cfg_source(ARGV[1])
-bound = ARGV[1].to_i
+delays = ARGV[1].to_i
+rounds = ARGV[2].to_i
+rec_bound = ARGV[3].to_i
 if not ARGV[1] then
     puts "Please give a numeric bound."
     usage()
@@ -53,13 +56,22 @@ name = File.basename(impl,".bpl")
 # `#{c2s} #{impl} --violin-instrument #{bound} --print #{name}.inst.bpl`
 # `cat #{name}.parikh.bpl #{name}.inst.bpl > #{name}.violin.bpl`
 
-puts "Sequentializing #{impl} with #{bound}-delay translation."
-`#{c2s} #{impl} --delay-bounding #{bound} --prepare-for-back-end --print #{name}.#{bound}-delay.bpl`
+seq = "#{name}.#{delays}-delay.bpl"
 
-puts "Verifying #{name}.#{bound}-delay.bpl with Boogie..."
+puts "Sequentializing #{impl} with #{delays}-delay translation."
+puts "-- Rounds: #{rounds}"
+puts "-- Delays: #{delays}"
+`#{c2s} #{impl} --delay-bounding #{rounds} #{delays} --prepare-for-back-end --print #{seq}`
+
+puts "Verifying #{seq} with Boogie..."
+puts "-- StratifiedInline"
+puts "-- ExtractLoops"
+puts "-- RecursionBound: #{rec_bound}"
 t0 = Time.now
-puts `#{boogie} #{name}.#{bound}-delay.bpl /stratifiedInline:1 /extractLoops`
-puts "Boogie finished in #{Time.now - t0}s."
+cmd = "#{boogie} #{seq} /stratifiedInline:1 /extractLoops /recursionBound:#{rec_bound}"
+puts "#{cmd}"
+puts `#{cmd}`
+puts "Finished in #{Time.now - t0}s."
 
 # if cleanup then
 #     File.delete( "#{src}.async.bpl" )

@@ -13,10 +13,8 @@ let stage_id = "A2S"
 
 (** An encoding of the depth-first task-scheduling order, a restriction of 
  * the unordered (i.e., "bag") semantics.*)
-let delay_bounding k pgm =
+let delay_bounding rounds delays pgm =
 	
-	let delays = k in
-	let rounds = k+1 in	
 	let main_proc = "Main" in
 	
 	let gs = List.map D.name 
@@ -111,10 +109,10 @@ let delay_bounding k pgm =
 	
 	let translate_yield s =
 		if Ls.is_yield s then [
-			Ls.ifstar (
+			( if Ls.is_short_yield s then Ls.ifstar else Ls.whilestar ) (
 				Ls.add_labels [delay_label ()] [
-					Ls.assume (E.ident round_idx |<| E.num (rounds-1)) ;
-					Ls.assume (E.ident delays_var |<| E.num (delays)) ;
+					Ls.assume (E.ident round_idx |<| E.ident rounds_const) ;
+					Ls.assume (E.ident delays_var |<| E.ident delays_const) ;
 					Ls.incr (E.ident round_idx) ; 
 				    Ls.incr (E.ident delays_var) ]
 			)
@@ -152,8 +150,10 @@ let delay_bounding k pgm =
 	and translate_assert s =
 		match s with
 		| ls, S.Assert e -> 
-			Ls.add_labels ls (
-				E.ident err_flag |:=| ( E.ident err_flag ||| !| e )	)
+			Ls.add_labels ls 
+			<< List.singleton
+			<< Ls.ifthen (E.ident round_idx |<| E.ident rounds_const)
+			<| (E.ident err_flag |:=| ( E.ident err_flag ||| !| e ))
 		| _ -> [s]
 	
 	in
