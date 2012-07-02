@@ -120,6 +120,7 @@ let delay_bounding rounds delays pgm =
 
 	and translate_call s =
 		match s with
+		| ls, S.Call (ax,_,_,_) when A.has "leavealone" ax -> [s]
 		| ls, S.Call (ax,n,ps,rs) ->
 			(* ToDo: return assignments for round_idx *)
 			[ ls, S.Call (ax,n,ps@[E.ident round_idx],rs) ]
@@ -127,7 +128,7 @@ let delay_bounding rounds delays pgm =
 
 	and translate_post s =
 		match s with
-		
+		| ls, S.Call (ax,_,_,_) when A.has "leavealone" ax -> [s]
 		| ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
 			if rs <> [] then
 				warn <| 
@@ -177,23 +178,35 @@ let delay_bounding rounds delays pgm =
 			~new_global_decls: ( init_decls @ next_decls @ new_decls )
 			~per_stmt_map: (const (translate_post <=< translate_assert))
 			
-			~new_proc_params: (fun (n,_) -> [init_round_idx, T.Int])
+			~new_proc_params: 
+				(fun (ax,n,_) ->
+					if A.has "leavealone" ax then []
+					else [init_round_idx, T.Int] )
 								
-			~new_local_decls: (fun (n,_) -> 
-				match Program.find_proc pgm n with
-				| Some p when Ls.contains_rec is_async_call (Procedure.stmts p) ->
-					save_decls @ guess_decls
-				| _ -> [] )
+			~new_local_decls: 
+				(fun (ax,n,_) -> 
+					if A.has "leavealone" ax then []
+					else match Program.find_proc pgm n with
+					| Some p when Ls.contains_rec is_async_call (Procedure.stmts p) ->
+						save_decls @ guess_decls
+					| _ -> [] )
 					
 			~replace_global_decls: 
-				( function D.Proc (ax,n,p) -> 
-					[ D.Proc (A.add (A.num "inline" 1) ax, n, p) ]
+				( function D.Proc (ax,n,p) as d -> 
+					if A.has "leavealone" ax then [d]
+					else [ D.Proc (A.add (A.num "inline" 1) ax, n, p) ]
 				  | d -> d :: [] )
 
 		<< Program.translate
 			~replace_global_decls: (fun d -> vectorize_var_decl d :: [])
-			~new_local_decls: (const [D.Var ([], round_idx, T.Int, None)])
-			~proc_body_prefix: (const (round_idx $:=$ init_round_idx ))
+			~new_local_decls: 
+				(fun (ax,_,p) ->  
+					if A.has "leavealone" ax then []
+					else [D.Var ([], round_idx, T.Int, None)])
+			~proc_body_prefix: 
+				(fun (ax,_,_) ->
+					if A.has "leavealone" ax then []
+					else (round_idx $:=$ init_round_idx ))
 			~per_stmt_map: (const (translate_call <=< translate_yield))
 			~per_expr_map: (fun n -> if n == top_proc then id else vectorize_expr)			
 		

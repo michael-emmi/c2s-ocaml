@@ -39,7 +39,7 @@ let instrument k p =
 				( String.concat ", " <| List.map (sprintf "%s.done") methods )
 		)
 		
-		~new_proc_params: (fun (n,p) -> 
+		~new_proc_params: (fun (_,n,p) -> 
 			if n == "Main" then
 				[]
 			else ["t0", T.Int]
@@ -68,7 +68,7 @@ let instrument k p =
 			| ls -> [ls]
 		))
 		
-		~proc_body_prefix: (fun (n,_) ->
+		~proc_body_prefix: (fun (_,n,_) ->
 			if n = "Main" then
 				Ls.parse <| sprintf (
 					"time := 0;
@@ -86,7 +86,7 @@ let instrument k p =
 			else []
 		)
 			
-		~proc_body_suffix: (fun (n,_) -> 
+		~proc_body_suffix: (fun (_,n,_) -> 
 			if List.mem n methods then
 				Ls.parse <| sprintf (
 					"Violin.End.%s: \

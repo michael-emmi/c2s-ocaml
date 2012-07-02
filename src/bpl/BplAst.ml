@@ -889,10 +889,10 @@ module Program = struct
 		List.append new_global_decls
 		<< List.flatten << map (
 			function D.Proc (ax,n,((ts,ps,rs,es,ds,ss) as p)) ->
-				let ps' = ps @ new_proc_params (n,p)
-				and rs' = rs @ new_proc_rets (n,p)
-				and ds' = ds @ new_local_decls (n,p)
-				and ss' = proc_body_prefix (n,p) @ ss @ proc_body_suffix (n,p)
+				let ps' = ps @ new_proc_params (ax,n,p)
+				and rs' = rs @ new_proc_rets (ax,n,p)
+				and ds' = ds @ new_local_decls (ax,n,p)
+				and ss' = proc_body_prefix (ax,n,p) @ ss @ proc_body_suffix (ax,n,p)
 				in D.Proc (ax,n,(ts,ps',rs',es,ds',ss')) :: []
 			| d -> d :: [] )
 		<< List.flatten << map replace_global_decls
