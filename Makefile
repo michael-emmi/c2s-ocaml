@@ -45,11 +45,20 @@ CMIFILES = $(addprefix $(OBJDIR)/, $(addsuffix .cmi, $(CAML_LIB_OBJ)))
 
 CAML_TEST_OBJ = # TestPrelude test_prover test_suite
 
+
 CAML_TPL_EXE = $(NAME)top
+
 
 CAML_COMMON_EXE_OBJ = 
 
-CAML_EXE = $(NAME)
+OS=$(uname)
+
+ifeq ($(OS), $(filter $(OS), Cygwin Mingw))
+	CAML_EXE = $(NAME).exe
+else
+	CAML_EXE = $(NAME)
+endif
+
 CAML_EXE_OBJ = $(CAML_LIB_OBJ) Main
 CAML_INCLUDES = $(INCDIR)
 CAML_LD_FLAGS = -I $(LIBDIR)
