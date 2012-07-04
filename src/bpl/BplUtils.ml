@@ -303,8 +303,9 @@ let dont_ignore_returns pgm s =
 							"Unmatched return assignment for procedure `%s'."
 							n
 							
-		  | _ -> failwith
-				<| Printf.sprintf "Could not resolve procedure `%s'." n
+		  | _ -> warn
+				<| Printf.sprintf "Could not resolve procedure `%s'." n;
+				s :: []
 	  end
 	| _ -> s :: []
 

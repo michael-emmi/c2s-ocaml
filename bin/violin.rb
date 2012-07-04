@@ -5,7 +5,6 @@
 c2s = "c2s"
 boogie = "Boogie"
 cleanup = false
-rec_bound = 1
 
 puts "Violin version #{@version}"
 
@@ -34,18 +33,34 @@ def cfg_source(file)
     return file
 end
 
-impl = bpl_source(ARGV[0])
-# spec = cfg_source(ARGV[1])
-delays = ARGV[1].to_i
-rounds = ARGV[2].to_i
-rec_bound = ARGV[3].to_i
-if not ARGV[1] then
-    puts "Please give a numeric bound."
-    usage()
-    exit
+sources, rest = ARGV.partition{|f| File.extname(f) == ".bpl"}
+delays, rest = rest.partition{|a| a =~ /\/delayBound:[0-9]+/}
+rounds, rest = rest.partition{|a| a =~ /\/rounds:[0-9]+/}
+
+if sources.empty? then
+	puts "Please specify at least one Boogie source file (.bpl)."
+	exit -1
 end
 
-name = File.basename(impl,".bpl")
+if delays.empty? then
+	puts "Please specify a delay bound with /delayBound:_."
+	exit -1
+end
+
+if rounds.empty? then
+	puts "Please specify the number of rounds with /rounds:_."
+	exit -1
+end
+
+delays = delays.first.sub(/\/delayBound:([0-9]+)/, '\1')
+rounds = rounds.first.sub(/\/rounds:([0-9]+)/, '\1')
+rest = rest * " "
+
+name = File.basename(sources.last,".bpl")
+
+comp = "#{name}.comp.bpl"
+
+`cat #{sources * " "} > #{comp}`
 
 ### Translate the specification grammar to a Presburger formula
 # puts "Translating #{spec}.cfg to #{spec}.parikh.bpl"
@@ -58,17 +73,21 @@ name = File.basename(impl,".bpl")
 
 seq = "#{name}.#{delays}-delay.bpl"
 
-puts "Sequentializing #{impl} with #{delays}-delay translation."
+puts "Sequentializing #{name} with #{delays}-delay translation."
 puts "-- Rounds: #{rounds}"
 puts "-- Delays: #{delays}"
-`#{c2s} #{impl} --delay-bounding #{rounds} #{delays} --prepare-for-back-end --print #{seq}`
+`#{c2s} #{comp} --delay-bounding #{rounds} #{delays} --prepare-for-back-end --print #{seq}`
 
 puts "Verifying #{seq} with Boogie..."
 puts "-- StratifiedInline"
 puts "-- ExtractLoops"
-puts "-- RecursionBound: #{rec_bound}"
+puts "-- and: #{rest}"
 t0 = Time.now
-cmd = "#{boogie} #{seq} /stratifiedInline:1 /extractLoops /recursionBound:#{rec_bound}"
+cmd = "#{boogie} #{seq} /stratifiedInline:1 /extractLoops #{rest} \
+	/errorLimit:1 /errorTrace:2"
+# other interesting flags: 
+# /errorLimit:1 -- only one error (per procedure)
+# /errorTrace:2 -- include all trace labels in error output
 puts "#{cmd}"
 puts `#{cmd}`
 puts "Finished in #{Time.now - t0}s."
