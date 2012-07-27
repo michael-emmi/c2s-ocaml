@@ -73,7 +73,8 @@ target_decl:
 ;
 
 invariant_decls:
-	{ [] }
+	constraints { $1 :: [] }
+	| constraints invariant_decls { $1 :: $2 }
 ;
 
 guards:
@@ -83,6 +84,11 @@ guards:
 
 guard:
 	identifier GE NUMBER { $1, $3 }
+	| identifier EQ NUMBER { 
+		failwith (Printf.sprintf
+			"Found reachability query %s = %n; we only handle coverability." 
+			$1 $3)
+	}
 ;
 
 constraints:

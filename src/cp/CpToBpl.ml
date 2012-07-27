@@ -174,7 +174,7 @@ let rec stmt s =
 
 									lvs )]
 
-		  | _, S.Post _ | _, S.Yield _ | _, S.New _ ->
+		  | _, S.Post _ | _, S.Yield | _, S.New _ ->
 				failwith "Cannot express concurrency in Boogie programs."
 
 		  | _, s -> failwith

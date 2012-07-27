@@ -99,7 +99,7 @@ let rec stmt s =
 						  List.map lval lvs )
 		  | S.Dead ids -> SS.Dead (List.map ident ids)
 
-		  | S.Post _ | S.Yield _ | S.New _ ->
+		  | S.Post _ | S.Yield | S.New _ ->
 				failwith "Cannot express concurrency in Boolean program."
 	  end
 	| Ls.C c -> [], SS.Skip
