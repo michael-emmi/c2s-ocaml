@@ -141,7 +141,7 @@ let delay_bounding rounds delays pgm =
 			  @ (next_gs $::=$ guess_gs)
 		      @ List.map Ls.stmt [ 
 				S.Call (A.strip "async" ax, n, ps, rs) ;
-			  	S.Assume (E.conj (List.map (fun g -> g $=$ guess g) gs)) ]
+			  	S.Assume ([],E.conj (List.map (fun g -> g $=$ guess g) gs)) ]
 			  @ (gs $::=$ save_gs) 
 			)			
 			
@@ -150,7 +150,7 @@ let delay_bounding rounds delays pgm =
 		
 	and translate_assert s =
 		match s with
-		| ls, S.Assert e -> 
+		| ls, S.Assert (_,e) -> 
 			Ls.add_labels ls 
 			<< List.singleton
 			<< Ls.ifthen (E.ident round_idx |<| E.ident rounds_const)

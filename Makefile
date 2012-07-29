@@ -28,7 +28,7 @@ CAML_LIB_OBJ = \
 	Parikh \
 	BplViolin \
 	PnToBpl \
-	BplEscAsync \
+	BplEscAsync BplFifoSeq \
 	BplAsyncToSeq \
 	CpAst CpParser CpLexer CpTyping CpUtils \
 	CpToBp CpToBpl \

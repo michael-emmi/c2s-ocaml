@@ -89,7 +89,7 @@ let rec stmt s =
 		  match List.map ident ls, s with
 		  | [], S.Skip | [], S.Dead _ -> []
 		  | ls, S.Skip | ls, S.Dead _ ->
-				[ls, SS.Assume (EE.bool true)]
+				[ls, SS.Assume ([],EE.bool true)]
 
 		  | ls, S.Goto ids -> [ls, SS.Goto (List.map ident ids)]
 		  | ls, S.Return _ -> [ls, SS.Return]
@@ -158,8 +158,8 @@ let rec stmt s =
 				[ ls, SS.While (decider e, List.map
 									(Tup2.ekam false << expr) es,
 								List.flatten (List.map stmt ss)) ]
-		  | ls, S.Assert e -> [ls, SS.Assert (expr e)]
-		  | ls, S.Assume e -> [ls, SS.Assume (expr e)]
+		  | ls, S.Assert e -> [ls, SS.Assert ([],expr e)]
+		  | ls, S.Assume e -> [ls, SS.Assume ([],expr e)]
 		  | ls, S.Call (p,es,lvs) ->
 				[ls, SS.Call ( [], ident p,
 							   List.map expr es,

@@ -23,7 +23,7 @@ module Type = struct
 	type t = Bool | Int | Bv of int
 			 | T of Identifier.t * t list
 			 | Map of Identifier.t list * t list * t
-
+			
 	open PrettyPrinting
 	let print_type_args = List.reduce (angles << Identifier.print_seq ) empty
 	let rec print t = match t with
@@ -317,8 +317,8 @@ module Lvalue = struct
 end
 	
 module rec Statement : sig
-	type t = Assert of Expression.t
-			 | Assume of Expression.t
+	type t = Assert of Attribute.t list * Expression.t
+			 | Assume of Attribute.t list * Expression.t
 			 | Havoc of Identifier.t list
 			 | Assign of Lvalue.t list * Expression.t list
 			 | Call of Attribute.t list * Identifier.t * Expression.t list * Identifier.t list
@@ -340,8 +340,8 @@ module rec Statement : sig
 	val to_string : t -> string
 	val print : t -> PrettyPrinting.doc
 end = struct
-	type t = Assert of Expression.t
-			 | Assume of Expression.t
+	type t = Assert of Attribute.t list * Expression.t
+			 | Assume of Attribute.t list * Expression.t
 			 | Havoc of Identifier.t list
 			 | Assign of Lvalue.t list * Expression.t list
 			 | Call of Attribute.t list * Identifier.t * Expression.t list * Identifier.t list
@@ -365,8 +365,8 @@ end = struct
 	module Ls = LabeledStatement
 		
 	let map_fold_exprs fn a = function
-		| Assert e -> let a, e = E.map_fold fn a e in a, Assert e
-		| Assume e -> let a, e = E.map_fold fn a e in a, Assume e
+		| Assert (ax,e) -> let a, e = E.map_fold fn a e in a, Assert (ax,e)
+		| Assume (ax,e) -> let a, e = E.map_fold fn a e in a, Assume (ax,e)
 		| Assign (lvs,es) -> 
 			let a, lvs = List.map_fold_left (Lv.map_fold_exprs fn) a lvs in
 			let a, es = List.map_fold_left (E.map_fold fn) a es in
@@ -392,8 +392,14 @@ end = struct
 
 	open PrettyPrinting
 	let rec print s = match s with
-		| Assert e -> keyword "assert" <+> Expression.print e <-> semi
-		| Assume e -> keyword "assume" <+> Expression.print e  <-> semi
+		| Assert (ax,e) -> 
+      keyword "assert" 
+      <+> Attribute.print_seq ax
+      <+> Expression.print e <-> semi
+		| Assume (ax,e) -> 
+      keyword "assume" 
+      <+> Attribute.print_seq ax
+      <+> Expression.print e  <-> semi
 		| Havoc xs -> keyword "havoc" <+> Identifier.print_seq xs <-> semi
 		| Assign (xs,es) ->
 			  Lvalue.print_seq xs
@@ -659,8 +665,10 @@ and Declaration : sig
 			  * Identifier.t
 			  * Identifier.t list
 			  * Type.t
-		| Const of Attribute.t list * bool
-			  * Identifier.t * Type.t * unit (* OrderSpec *)
+		| Const of Attribute.t list 
+			  * bool (* unique *)
+			  * Identifier.t * Type.t 
+			  * unit (* OrderSpec *)
 		| Func of Attribute.t list
 			  * Identifier.t * Identifier.t list 
 			  * (Identifier.t option * Type.t) list
@@ -669,13 +677,17 @@ and Declaration : sig
 		| Axiom of Attribute.t list * Expression.t
 		| Var of Attribute.t list
 			  * Identifier.t * Type.t
-			  * Expression.t option
+			  * Expression.t option (* where clause *)
 		| Proc of Attribute.t list
 			  * Identifier.t
 			  * Procedure.t
 		| Impl of Attribute.t list
 			  * Identifier.t 
 			  * Procedure.t
+			
+	val var : Identifier.t -> Type.t -> t
+	val const : Identifier.t -> Type.t -> t
+	val axiom : Expression.t -> t
 
 	val name : t -> Identifier.t
 	val rename : (Identifier.t -> Identifier.t) -> t -> t
@@ -712,6 +724,10 @@ end = struct
 		| Impl of Attribute.t list
 			  * Identifier.t 
 			  * Procedure.t 
+			
+	let var s t = Var ([],s,t,None)
+	let const s t = Const ([],false,s,t,())
+	let axiom e = Axiom ([],e)
 
 	let name = function
 		| TypeCtor _ -> "type"
@@ -891,8 +907,22 @@ module Program = struct
 			function D.Proc (ax,n,((ts,ps,rs,es,ds,ss) as p)) ->
 				let ps' = ps @ new_proc_params (ax,n,p)
 				and rs' = rs @ new_proc_rets (ax,n,p)
-				and ds' = ds @ new_local_decls (ax,n,p)
-				and ss' = proc_body_prefix (ax,n,p) @ ss @ proc_body_suffix (ax,n,p)
+				and ds' = ds @ new_local_decls (ax,n,p) in
+        
+        (* Add the suffix just before each return statement. *)
+        let ss = snd << Ls.map_fold_stmts (
+          fun () s -> 
+            match s with
+            | ls, Statement.Return -> (), proc_body_suffix (ax,n,p) @ [s]
+            | _ -> (), [s]
+        ) () <| ss in
+        
+        (* Add the suffix as the last statement(s) if the procedure
+          does not end with a return. *)
+				let ss' = proc_body_prefix (ax,n,p) @ ss 
+          @ ( match List.last ss with _, Statement.Return -> []
+              | _ -> proc_body_suffix (ax,n,p) )
+              
 				in D.Proc (ax,n,(ts,ps',rs',es,ds',ss')) :: []
 			| d -> d :: [] )
 		<< List.flatten << map replace_global_decls
