@@ -71,6 +71,7 @@
 %left AST DIV MOD
 %nonassoc NOT
 %nonassoc LBRACKET RBRACKET
+%left OLD
 %left FORALL EXISTS
   
 %%
@@ -112,7 +113,7 @@ declaration:
 		  { D.TypeCtor ($2,true,$4,$5) :: [] }
   | TYPE attributes_opt identifier identifiers_opt SEQ type_ SEMI
 		  { D.TypeSyn ($2,$3,$4,$6) :: [] }
-  |	CONST attributes_opt unique_opt typed_identifiers order_spec SEMI
+  |	CONST attributes_opt unique_opt typed_identifiers_seq order_spec SEMI
 	{ List.map (fun (c,t) -> D.Const ($2,$3,c,t,$5)) $4 }
 
   | FUNCTION attributes_opt identifier function_signature SEMI {
@@ -126,7 +127,7 @@ declaration:
 		  }
   | AXIOM attributes_opt expression SEMI { D.Axiom ($2,$3) :: [] }
 
-  | VAR attributes_opt constrained_typed_identifiers SEMI {
+  | VAR attributes_opt constrained_typed_identifiers_seq SEMI {
 		List.map (fun (x,t) -> D.Var ($2,x,t,None)) $3
 	}
   | PROCEDURE attributes_opt identifier
@@ -167,10 +168,10 @@ procedure_signature:
 
 type_args_opt:
 	{ [] }
+  | type_args { $1 }
 ;
 
 type_args:
-/* LANGLE identifiers RANGLE { $2 } */
 	LT identifiers GT { $2 }
 ;
 	
@@ -203,8 +204,6 @@ procedure_spec:
 
 free_opt: { false } | FREE { true } ;
 unique_opt: { false } | UNIQUE { true } ;
-/* finite_opt: { false } | FINITE { true } ;
-complete_opt: { false } | COMPLETE { true } ; */
 
 var_decls_opt:
 	{ [] }
@@ -217,18 +216,31 @@ var_decls:
 ;
 
 var_decl:
-	VAR attributes_opt constrained_typed_identifiers SEMI
+	VAR attributes_opt constrained_typed_identifiers_seq SEMI
 	{ List.map (fun (x,t) -> D.Var ($2,x,t,None)) $3 }
 ;
 
 /* ToDo: IdsTypeWhere */
 constrained_typed_identifiers_opt:
 	{ [] }
-  | constrained_typed_identifiers { $1 }
+  | constrained_typed_identifiers_seq { $1 }
+;
+
+constrained_typed_identifiers_seq:
+  constrained_typed_identifiers COMMA constrained_typed_identifiers_seq { $1 @ $3 }
+;
+
+typed_identifiers_seq:
+  typed_identifiers COMMA typed_identifiers_seq { $1 @ $3 }
 ;
 	
 constrained_typed_identifiers:
-	typed_identifiers { $1 }
+  | identifiers COLON type_ WHERE expression { List.map (fun x -> (x,$3)) $1 }
+  | identifiers COLON type_ { List.map (fun x -> (x,$3)) $1 }
+;
+
+typed_identifiers:
+	identifiers COLON type_ { List.map (fun x -> (x,$3)) $1 }
 ;
 
 function_args:
@@ -241,16 +253,12 @@ function_arg:
   | identifier COLON type_ { Some $1, $3 }
 ;
 
-typed_identifiers:
-	identifiers COLON type_ { List.map (fun x -> (x,$3)) $1 }
-  | identifiers COLON type_ COMMA typed_identifiers
-		  { (List.map (fun x -> (x,$3)) $1) @ $5 }
-;
 
-typed_identifier:
+
+/*typed_identifier:
 	identifier COLON type_ { $1, $3 }
 ;
-
+*/
 /* ToDo: OrderSpec */
 order_spec:
 	{ () }
@@ -276,8 +284,11 @@ attr_args_opt:
 ;
 
 attr_arg:
-	expression { Left $1 }
-  | identifier { Right $1 }
+    expression {
+	 match $1 with 
+	 | Expression.Id x -> Right x
+	 | e -> Left e
+	}
 ;	
 
 triggers_and_attributes_opt:
@@ -449,15 +460,15 @@ expression:
   | literal { E.Lit $1 }
   | identifier { E.Id $1 }
   | identifier LPAREN expressions_opt RPAREN { E.FnApp ($1,$3) }
+	
   | OLD LPAREN expression RPAREN { E.Old $3 }
 
-  | LPAREN quantifier type_args_opt typed_identifiers QSEP 
+  | LPAREN quantifier type_args_opt typed_identifiers_seq QSEP 
 		  triggers_and_attributes_opt expression RPAREN
 	  { let ax, ts = Either.separate $6 in
 		E.Q ($2,$3,$4,ax,ts,$7) }
 
   | LPAREN expression RPAREN { $2 }
-
 ;
 
 quantifier: 

@@ -285,7 +285,7 @@ type_:
   | LBRACKET types RBRACKET type_ { Type.Map ($2,$4) }
 ;
 
-enforce_opt:
+/*enforce_opt:
 	{ None }
   | enforce { Some $1 }
 ;
@@ -293,7 +293,7 @@ enforce_opt:
 enforce:
 	ENFORCE expression SEMI { $2 }
 ;
-
+*/
 
 labeled_statements_opt:
 	{ [] }

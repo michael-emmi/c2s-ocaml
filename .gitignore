@@ -2,6 +2,7 @@
 doc
 obj
 bin/c2s
+bin/c2s.exe
 *.annot
 *.output
 *.async.bpl

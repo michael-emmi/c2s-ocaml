@@ -46,10 +46,6 @@ invariant_decls_opt:
 	| INVARIANTS invariant_decls { $2 }
 ;
 
-invariant_decls:
-	{ [] } /* TODO */
-;
-
 var_decls:
 	{ [] }
 	| identifier var_decls { $1 :: $2 }
@@ -104,12 +100,6 @@ reln:
 	GE { Constraint.GE }
 	| EQ { Constraint.EQ }
 ;
-
-updates_opt:
-	{ [] }
-	| updates { $1 }
-;
-
 
 updates:
 	update { $1 :: [] }
