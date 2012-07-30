@@ -1,3 +1,4 @@
 exclude = '{$exclude,*.annot}'
 softTabs = true
+softWrap = false
 tabSize = 2

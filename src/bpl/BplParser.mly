@@ -227,11 +227,13 @@ constrained_typed_identifiers_opt:
 ;
 
 constrained_typed_identifiers_seq:
-  constrained_typed_identifiers COMMA constrained_typed_identifiers_seq { $1 @ $3 }
+  | constrained_typed_identifiers { $1 }
+  | constrained_typed_identifiers COMMA constrained_typed_identifiers_seq { $1 @ $3 }
 ;
 
 typed_identifiers_seq:
-  typed_identifiers COMMA typed_identifiers_seq { $1 @ $3 }
+  | typed_identifiers { $1 }
+  | typed_identifiers COMMA typed_identifiers_seq { $1 @ $3 }
 ;
 	
 constrained_typed_identifiers:

@@ -15,6 +15,7 @@ let parse_string psr lxr str =
 		let s = String.sub str start_pos end_pos in
 		eprintf "Parse error between %n::%n and %n::%n in %s\n"
 			sl sc el ec s;
+    eprintf "%s^%s^\n" (String.make (max 0 (sc-1)) ' ') (String.make (max 0 (ec-sc-1)) '-');
 		failwith "parse error"
 	end
 	
@@ -50,5 +51,6 @@ let parse_file psr lxr src_file =
 
 		  eprintf "Parse error between %n::%n and %n::%n in%s\n"
 			  sl sc el ec !s;
+      eprintf "%s^%s^\n" (String.make (max 0 (sc-1)) ' ') (String.make (max 0 (ec-sc-1)) '-');
 		  failwith "parse error"
 	  end

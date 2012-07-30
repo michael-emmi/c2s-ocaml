@@ -6,6 +6,9 @@ let tsnoc _ x = x
 let const2 x _ _ = x
 let id x = x
 
+let min x y = if x < y then x else y
+let max x y = if x > y then x else y
+
 let apply f x = f x
 let ylppa x f = f x
 let (<|) = apply
