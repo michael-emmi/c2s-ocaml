@@ -66,6 +66,9 @@ let delay_bounding rounds delays pgm =
 	and guess_gs = List.map guess gs
 	in
 	
+	(* let global_access e gs =  *)
+		
+	
 	let new_decls = [
 		D.Const ([], false, rounds_const, T.Int, ()) ;
 		D.Axiom ([], E.ident rounds_const |=| E.num rounds) ;
@@ -134,7 +137,10 @@ let delay_bounding rounds delays pgm =
 				warn <| 
 				sprintf "Found async call (to procedure `%s') with assignments." n;
 			
+			(* let xs = List.filter (fun x -> global_access x gs) ps in *)
+			
 			Ls.add_labels ls (
+				(* ToDo: evaluate arguments so globals can be saved. *)
 			  (save_gs $::=$ gs)
 			  @ (gs $::=$ next_gs)
 			  @ [Ls.havoc guess_gs]
