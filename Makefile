@@ -24,12 +24,13 @@ CAML_LIB_OBJ = \
 	Cfg CfgParser CfgLexer \
 	PnAst PnParser PnLexer \
 	BpAst BpParser BpLexer BpUtils \
-	BplAst BplParser BplLexer BplUtils BplTranslateUtils \
+	BplAst BplParser BplLexer BplUtils BplSeqFramework \
 	Parikh \
 	BplViolin \
 	PnToBpl \
 	BplEscAsync BplFifoSeq \
 	BplAsyncToSeq \
+	BplMultiToSingle \
 	CpAst CpParser CpLexer CpTyping CpUtils \
 	CpToBp CpToBpl \
 	CpTranslateUtils \
@@ -51,7 +52,7 @@ CAML_TPL_EXE = $(NAME)top
 
 CAML_COMMON_EXE_OBJ = 
 
-OS=$(shell uname)
+OS=$(shell uname -a)
 
 ifeq ($(OS), $(filter $(OS), Cygwin Mingw))
 	CAML_EXE = $(NAME).exe
@@ -66,8 +67,8 @@ CAML_OPT_LD_FLAGS = -I $(LIBDIR)
 CAML_LD_LIBS = unix str nums
 
 MODULES = $(CAML_LIB_OBJ) Main $(CAML_TEST_OBJ)
-MLYS	= CpParser.mly BpParser.mly BplParser.mly PnParser.mly CfgParser.mly
-MLLS	= CpLexer.mll BpLexer.mll BplLexer.mll PnLexer.mll CfgLexer.mll
+MLYS = $(notdir $(shell find $(SRC) -name "*.mly"))
+MLLS = $(notdir $(shell find $(SRC) -name "*.mll"))
 
 TOOLS = 
 
@@ -98,9 +99,7 @@ distclean: clean
 	@rm -rf $(OBJDIR) $(DOCDIR) $(TESTLOGS)
 	@rm -f $(BINDIR)/$(CAML_TPL_EXE) $(BINDIR)/$(CAML_EXE) $(TARBALL)
 
-exe :: $(BINDIR)/$(CAML_EXE)
-	@$(NARRATIVE) Made executable \"$(BINDIR)/$(CAML_EXE)\" for system \"$(OS)\" 
-	
+exe :: $(BINDIR)/$(CAML_EXE)	
 
 top :: $(BINDIR)/$(CAML_TPL_EXE)
 

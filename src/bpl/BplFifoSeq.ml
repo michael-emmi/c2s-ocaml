@@ -7,7 +7,7 @@ open BplAst
 open BplUtils
 open Operators
 
-module Tr = BplTranslateUtils
+module Tr = BplSeqFramework
 
 let stage_id = "FiFoSeq"
 
@@ -46,7 +46,7 @@ let phase_bounding_without_delays k p =
         List.map Ls.assume
      		<< List.map (fun g -> repl g (E.num (i-1)) |=| init g (E.num i))
      		<| gvars )
-     		<| List.range 1 (phases-1)
+ 		<| List.range 1 (phases-1)
   in
 
   let post_to_call_no_globals s =
@@ -76,7 +76,7 @@ let phase_bounding_without_delays k p =
       (* let target_pid = E.ident "TARGET_PID" in *)
       
       Ls.add_labels ls [
-        Ls.ifthen (E.ident phase_var |<| E.num (phases-1)) [
+        Ls.ifthen (E.ident phase_var |<| E.ident bound) [
           Ls.stmt (S.Call (A.strip "async" ax, n, 
             ps @ [E.ident phase_var |+| E.num 1],
             rs
@@ -99,16 +99,16 @@ let phase_bounding_without_delays k p =
     else if Ls.is_annot [A.unit "validity"] s then [s]@validity_predicate
     else [s]
 		
-  and first_gval gs e =
-    match e with
-    | E.Id x when List.mem x gs -> repl x (E.num 0)
-    | _ -> e
-  
-  and last_gval gs e =
-    match e with
-    | E.Id x when List.mem x gs -> repl x (E.num <| k)
-    | _ -> e
-  
+		(*   and first_gval gs e =
+		    match e with
+		    | E.Id x when List.mem x gs -> repl x (E.num 0)
+		    | _ -> e
+		  
+		  and last_gval gs e =
+		    match e with
+		    | E.Id x when List.mem x gs -> repl x (E.num <| k)
+		    | _ -> e
+		   *)
 	in
 
   ( if List.length gvars = 0 then
@@ -136,8 +136,9 @@ let phase_bounding_without_delays k p =
   			  | _ -> [d] )
     
       ~new_global_decls: [ 
-        D.const bound Type.Int ; 
-        D.axiom ( E.ident bound |=| E.num phases )
+        D.const bound Type.Int ;
+        D.axiom ( E.ident bound |>=| E.num 0 ) ;
+        D.axiom ( E.ident bound |<| E.num phases ) ;
       ]
 			
 			~new_proc_params: 
@@ -150,7 +151,10 @@ let phase_bounding_without_delays k p =
         (fun (ax,n,_) ->
           if A.has "leavealone" ax then []
           else if List.mem n [] then []
-          else List.filter ((=) "var" << D.kind) (Program.decls p))
+          else List.filter (function
+            | D.Var (ax,_,_,_) when not (A.has "leavealone" ax) -> true
+            | _ -> false)
+            (Program.decls p))
 
 			~proc_body_prefix: 
 				(fun (ax,n,_) ->
@@ -175,14 +179,9 @@ let phase_bounding_without_delays k p =
           if List.mem n Tr.aux_procs then List.unit
         else predicates <=< call <=< post_to_call)
           
-      ~per_expr_map:
-        (fun n -> 
-          if n = Tr.init_proc then first_gval gvars
-          else if n = Tr.check_proc then last_gval gvars
-          else id)
+      ~per_expr_map: (fun n -> id)
           
 		<< id )
-  << Tr.seq_framework
 	<| p
 
 

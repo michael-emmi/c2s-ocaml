@@ -685,8 +685,10 @@ and Declaration : sig
 			  * Identifier.t 
 			  * Procedure.t
 			
+  val type_ : Identifier.t -> t
 	val var : Identifier.t -> Type.t -> t
 	val const : Identifier.t -> Type.t -> t
+  val uniq_const : Identifier.t -> Type.t -> t
 	val axiom : Expression.t -> t
 
 	val name : t -> Identifier.t
@@ -700,7 +702,7 @@ and Declaration : sig
 end = struct
 	type t =
 		| TypeCtor of Attribute.t list
-			  * bool
+			  * bool (* finite -- note this doesn't work anymore in Boogie. *)
 			  * Identifier.t
 			  * Identifier.t list
 		| TypeSyn of Attribute.t list
@@ -725,8 +727,10 @@ end = struct
 			  * Identifier.t 
 			  * Procedure.t 
 			
+  let type_ t = TypeCtor ([],false,t,[])
 	let var s t = Var ([],s,t,None)
 	let const s t = Const ([],false,s,t,())
+  let uniq_const s t = Const ([],true,s,t,())
 	let axiom e = Axiom ([],e)
 
 	let name = function
@@ -864,7 +868,6 @@ module Program = struct
 		snd << map_fold_stmts (fun n _ s -> (), fn n s) ()
 	
 	let fold_stmts fn a = fst << map_fold_stmts (fun _ a s -> fn a s, [s]) a
-
 
 	let map_exprs fn = 
 		List.map (

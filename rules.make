@@ -125,7 +125,7 @@ endif
 
 .PHONY: default-clean
 default-clean:
-	@$(NARRATIVE) Cleaning
+	@$(NARRATIVE) Cleaning 
 	$(ECHO)-find obj \( \
 	    -name '*.cmi' -o \
 	    -name '*.cmo' -o \
@@ -146,6 +146,10 @@ default-clean:
 	    -name '*.output' \) -exec rm {} \;
 	$(ECHO)-find $(DEPENDDIR) \( \
 	    -name '*.ml*.depend' \) -exec rm {} \;
+	$(ECHO)rm -f $(addsuffix .output, $(basename $(shell find $(SRC) -name "*.mly")))
+	$(ECHO)rm -f $(addsuffix .ml, $(basename $(shell find $(SRC) -name "*.mll")))
+		
+	
 
 
 FIXDEPEND:=perl -e 'while(<>) { s%[^/\\ :]+[/\\]% %g; \

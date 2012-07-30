@@ -182,6 +182,11 @@ let flags : flag_spec list = [
 	"Translate multi-processor program to single-processor.",
 	["async"],
 	false;
+  
+  "seq-framework", [],
+  "Framework for sequential reductions.",
+  [],
+  false;
 	
 	"asserts-to-err-flag", [],
 	"Translate assertions to raise an error flag.",

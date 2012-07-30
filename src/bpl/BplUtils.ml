@@ -13,7 +13,7 @@ end
 module Statement = struct
 	include Statement
 	module A = Attribute
-	let skip = Call ([A.unit "skip"], "skip", [], [])
+	let skip = Assume ([], Expression.bool true)
   let annot ax = Assume (ax, Expression.bool true)
 	let yield = Call ([A.unit "yield"], "yield", [], [])
 	let post n ps = Call ([A.unit "async"],n,ps,[])
@@ -108,6 +108,12 @@ module Expression = struct
 	include Expression
 	
 	let sel e es = Sel (e,es)
+  
+  let ids_of e = 
+    fold (fun ids e -> 
+      match e with 
+      | Id i -> List.add_uniq i ids
+      | _ -> ids ) [] e
 
   let negate e = 
     match e with
@@ -139,6 +145,9 @@ module Program = struct
 				  <| LabeledStatement.called (Procedure.stmts p)
 			| _ -> a
 		in foc [] a (D.Proc ([],"",p))
+    
+  let exists_stmt fn pgm =
+    fold_stmts (fun a s -> a || fn s) false pgm
 	
 	let parse = ParsingUtils.parse_string
 		BplParser.program_top
@@ -324,7 +333,11 @@ let dont_ignore_returns pgm s =
 
 (** Apply whatever transformations necessary for the back-end in use. *)
 let prepare_for_back_end pgm =
-	fix_modifies
+  (fun p -> 
+    if Program.exists_stmt (function (_, S.Assert _) -> true | _ -> false ) p 
+    then (warn "Boogie's SI-mode may not handle assertions correctly!"; p)
+    else p )
+	<< fix_modifies
 	<< Program.map_stmts (const <| dont_ignore_returns pgm)
 	<< Program.map_procs
 		(fun ((tx,ps,rs,sx,ds,ss) as proc) ->

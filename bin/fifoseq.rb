@@ -2,7 +2,7 @@
 
 @version = "0.1"
 
-c2s = "c2s"
+c2s = "#{File.dirname $0}/c2s"
 boogie = "Boogie"
 cleanup = false
 
@@ -63,7 +63,11 @@ seq = "#{name}.#{phases}-phase.bpl"
 puts "Sequentializing #{name} with #{phases}-phase translation."
 puts "-- Phases: #{phases}"
 puts "-- Delays: #{delays}"
-`#{c2s} #{comp} --phase-bounding #{phases} #{delays} --prepare-for-back-end --print #{seq}`
+`#{c2s} #{comp} \
+  --seq-framework \
+  --multi-to-single \
+  --phase-bounding #{phases} #{delays} \
+  --prepare-for-back-end --print #{seq}`
 
 puts "Verifying #{seq} with Boogie..."
 puts "-- StratifiedInline"

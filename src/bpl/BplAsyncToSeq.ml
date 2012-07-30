@@ -7,7 +7,7 @@ open BplAst
 open BplUtils
 open Operators
 
-module Tr = BplTranslateUtils
+module Tr = BplSeqFramework
 
 let stage_id = "A2S"
 

@@ -97,18 +97,15 @@ let decimal_lit =
 let hex_digit = ['0'-'9' 'a'-'f' 'A'-'F']
 let hex_integer_lit = "0x" hex_digit+
 
-let escape = '\\' _
+let escape = '\\' _ 
 let hex_escape = '\\' ['x' 'X'] hex_digit hex_digit
   
 let double_string_char = [^ '"' '\n'] | escape
 let single_string_char = [^ '\'' '\n'] | escape
 
-(*
-Using ' as a part of the symbol for primed variables
-let string_lit =
-  '"' double_string_char* '"'
-  | '\'' single_string_char* '\''
-*)
+
+(* Using ' as a part of the symbol for primed variables *)
+let string_lit = '"' double_string_char* '"'
 
 let null_lit = "null"
 let boolean_lit = "true" | "false"
@@ -131,18 +128,15 @@ rule token = parse
 (*   | decimal_integer_lit as lxm { INT_VAL (int_of_string lxm) } *)
 (*   | hex_integer_lit as lxm { INT_VAL (int_of_string lxm) } *)
 (*   | decimal_lit as lxm { FLOAT_VAL (float_of_string lxm) } *)
-(*   | string_lit as lxm { STRING_VAL (unescape_quotes (String.sub lxm 1 (String.length lxm - 2))) } *)
 
   | symbol_name as sym
       { (try Hashtbl.find keyword_tbl sym
 	 with Not_found -> (fun l -> ID (sym,l)))
 	  lexbuf.Lexing.lex_curr_p }
 
+  | string_lit as lxm { STRING_LIT (unescape_quotes (String.sub lxm 1 (String.length lxm - 2))) }
   | decimal_integer_lit as lxm { NUMBER (int_of_string lxm) }
-
   | bv_type as lxm { BV (int_of_string <| String.drop 2 lxm) }
-
-
 
   | "==>"          { IMPLIES }
   | "<==>"         { IFF }

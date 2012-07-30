@@ -2,10 +2,10 @@
 var b: bool;
 var c: bool;
 
-procedure Main ()
+procedure {:node p1} Main ()
 {
 	b := false;
-	call {:async} Ping ();
+	call {:async} {:node p1} Ping ();
 	return;
 }
 
@@ -13,7 +13,7 @@ procedure Ping ()
 {
 	assert !b;
 	b := true;
-	call {:async} Pong ();
+	call {:async} {:node p2} Pong ();
     return;
 }
 
@@ -21,6 +21,6 @@ procedure Ping ()
 procedure Pong () 
 {
 	b := false;
-	call {:async} Ping ();
+	call {:async} {:node p1} Ping ();
 	return;
 }

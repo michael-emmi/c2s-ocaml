@@ -33,18 +33,32 @@ let inline_procs =
         | D.Proc (ax,_,_) when A.has "leavealone" ax -> [d]
         | D.Proc (ax,n,p) -> [D.Proc (A.add (A.num "inline" 1) ax, n, p)] 
         | _ -> [d] )
+      
+let boogie_si_mode = true
         
 let seq_framework  =   
   Program.translate
     ~new_global_decls: [ 
       D.Var ([A.unit "leavealone"],err_flag,T.Bool,None) ;
-      D.Proc ([A.unit "leavealone"], top_proc_name, (
-        [],[],[],[],[],(
+      D.Proc ( 
+        [A.unit "leavealone"]
+        
+          (* Boogie's /stratifiedInline mode wants you to specify some
+             entrypoint procedures. *)
+          @ (if boogie_si_mode then [A.unit "entrypoint"] else []), 
+          
+        top_proc_name, ([],[],[],[],[],(
           (E.ident err_flag |:=| E.bool false)
           @ [ Ls.annotate [A.unit "initial"] ]
           @ [ Ls.call main_proc_name [] [] ]
           @ [ Ls.annotate [A.unit "validity"] ]
-          @ [ Ls.assert_ (!| (E.ident err_flag))]
+
+          @ [ if boogie_si_mode 
+              (* Boogie's /stratifiedInline mode checks whether an entrypoint
+                 procedure can return. *)
+              then Ls.assume (E.ident err_flag) 
+              else Ls.assert_ (!| (E.ident err_flag)) ]
+
           @ [ Ls.return ]
         ))
       )

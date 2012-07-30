@@ -67,11 +67,13 @@ let _ =
 			| BP p, ("prepare-for-back-end",_) -> BP (BpUtils.prepare_for_back_end p)
 			| BPL p, ("prepare-for-back-end",_) -> BPL (BplUtils.prepare_for_back_end p)
 			
+      | BPL p, ("seq-framework",_) -> BPL (BplSeqFramework.seq_framework p)
 			| BPL p, ("esc-async",_) -> BPL (BplEscAsync.async_to_seq p)	
 			| BPL p, ("delay-bounding",[Op.Int rounds ; Op.Int delays]) -> 
 				BPL (BplAsyncToSeq.delay_bounding rounds delays p)
       | BPL p, ("phase-bounding",[Op.Int phases ; Op.Int delays]) -> 
         BPL (BplFifoSeq.phase_bounding phases delays p)
+      | BPL p, ("multi-to-single",_) -> BPL (BplMultiToSingle.multi_to_single p)
 			
 			(* Printing *)	
 			| CP p, ("print",[Op.File f]) -> print_to_file f (CpAst.Program.print p); CP p

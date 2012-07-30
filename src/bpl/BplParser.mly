@@ -32,6 +32,7 @@
 
 %token <int> NUMBER
 %token <int> BVLIT
+%token <string> STRING_LIT
 
 %token IMPLIES IFF OR AND
 %token SEQ EQ NEQ LT GT LTE GTE SUB
@@ -282,16 +283,18 @@ attribute:
 
 attr_args_opt:
 	{ [] }
-  | attr_arg attr_args_opt { $1 :: $2 }
+  | attr_args { $1 }
+;
+
+attr_args:
+  attr_arg { $1 :: []}
+  | attr_arg COMMA attr_args { $1 :: $3 }
 ;
 
 attr_arg:
-    expression {
-	 match $1 with 
-	 | Expression.Id x -> Right x
-	 | e -> Left e
-	}
-;	
+  expression { Left $1 }
+  | STRING_LIT { Right $1 }
+;  
 
 triggers_and_attributes_opt:
 	{ [] }
