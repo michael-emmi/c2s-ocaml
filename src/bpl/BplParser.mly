@@ -341,8 +341,8 @@ labeled_statement:
 ;
 
 statement:
-	ASSERT expression SEMI { S.Assert $2 }
-  | ASSUME expression SEMI { S.Assume $2 }
+	ASSERT attributes_opt expression SEMI { S.Assert ($2,$3) }
+  | ASSUME attributes_opt expression SEMI { S.Assume ($2,$3) }
   | HAVOC identifiers SEMI { S.Havoc $2 }
   | lvalues ASSIGN expressions SEMI { S.Assign ($1,$3) }
   | CALL attributes_opt identifier LPAREN expressions_opt RPAREN SEMI

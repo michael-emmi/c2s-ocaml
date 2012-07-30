@@ -70,6 +70,8 @@ let _ =
 			| BPL p, ("esc-async",_) -> BPL (BplEscAsync.async_to_seq p)	
 			| BPL p, ("delay-bounding",[Op.Int rounds ; Op.Int delays]) -> 
 				BPL (BplAsyncToSeq.delay_bounding rounds delays p)
+      | BPL p, ("phase-bounding",[Op.Int phases ; Op.Int delays]) -> 
+        BPL (BplFifoSeq.phase_bounding phases delays p)
 			
 			(* Printing *)	
 			| CP p, ("print",[Op.File f]) -> print_to_file f (CpAst.Program.print p); CP p

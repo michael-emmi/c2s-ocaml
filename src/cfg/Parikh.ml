@@ -27,7 +27,7 @@ let image_of_cfg g =
 	<< (fun e -> 
 			D.Proc ([A.num "inline" 1], "Violin.PresburgerInvariant", (
 				[], List.map (fun x -> sprintf "x.%s" x, T.Int) (G.alphabet g),
-				[], [], [], [ Ls.stmt (S.Assert e) ]
+				[], [], [], [ Ls.stmt (S.Assert ([],e)) ]
 			)))
 	<< E.exists (
 		List.map (fun p -> sprintf "y.p%n" (List.assoc p pidx), T.Int) (G.rules g)

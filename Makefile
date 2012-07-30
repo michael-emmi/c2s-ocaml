@@ -28,7 +28,7 @@ CAML_LIB_OBJ = \
 	Parikh \
 	BplViolin \
 	PnToBpl \
-	BplEscAsync \
+	BplEscAsync BplFifoSeq \
 	BplAsyncToSeq \
 	CpAst CpParser CpLexer CpTyping CpUtils \
 	CpToBp CpToBpl \
@@ -51,7 +51,7 @@ CAML_TPL_EXE = $(NAME)top
 
 CAML_COMMON_EXE_OBJ = 
 
-OS=$(uname)
+OS=$(shell uname)
 
 ifeq ($(OS), $(filter $(OS), Cygwin Mingw))
 	CAML_EXE = $(NAME).exe
@@ -99,6 +99,8 @@ distclean: clean
 	@rm -f $(BINDIR)/$(CAML_TPL_EXE) $(BINDIR)/$(CAML_EXE) $(TARBALL)
 
 exe :: $(BINDIR)/$(CAML_EXE)
+	@$(NARRATIVE) Made executable \"$(BINDIR)/$(CAML_EXE)\" for system \"$(OS)\" 
+	
 
 top :: $(BINDIR)/$(CAML_TPL_EXE)
 

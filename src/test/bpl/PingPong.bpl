@@ -1,49 +1,32 @@
 /**
- * [PingPong.bpl] 
- * 
- * Two asynchronous procedures posting eachother back and forth.
+ * begin [ping-pong.cp]
+ * @expect verified
+ * @phase-bound $unroll
+ * @fifo-bound 1 5
+ * @unroll 1 50
  */
 
-var x: bool;
+var b: bool;
 
-axiom {:dispatch} pending(Ping) <= 1;
-axiom {:dispatch} pending(Pong) <= 1;
-axiom {:dispatch} pending(Ping) > 0 ==> !x;
-axiom {:dispatch} pending(Pong) > 0 ==> x;
-
-procedure Ping ()
-requires !x;
-modifies x;
-ensures x;
-posts Pong;
-ensures pending(Pong) <= old(pending(Pong)) + 1;
+procedure main ()
 {
-	assert !x;
-    call {:async} Pong ();
-    x := true;
+	b := false;
+	call {:async} Ping ();
+	return;
+}
+
+procedure Ping () 
+{
+	assert !b;
+	b := true;
+	call {:async} Pong ();
     return;
 }
 
-procedure Pong ()
-requires x;
-modifies x;
-ensures !x;
-posts Ping;
-ensures pending(Ping) <= old(pending(Ping)) + 1;
-{
-	assert x;
-    call {:async} Ping ();
-    x := false;
-    return;
-}
 
-procedure Main ()
-modifies x;
-ensures !x;
-posts Ping;
-ensures pending(Ping) <= old(pending(Ping)) + 1;
+procedure Pong () 
 {
-    x := false;
-    call {:async} Ping ();
-    return;
+	b := false;
+	call {:async} Ping ();
+	return;
 }

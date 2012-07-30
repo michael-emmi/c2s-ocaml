@@ -55,7 +55,7 @@ let program k (vars,rules,init,target) =
 		type marking = [place] int;
 		const empty: marking;
 		const target: marking;
-		const init: transition;
+		const unique init: transition;
 		const in: [transition] marking;
 		const out: [transition] marking;
 		const K: int;
@@ -79,13 +79,13 @@ let program k (vars,rules,init,target) =
 	
 	(* The list of variables *)
 	@ List.map (fun v -> 
-		D.Const ([], false, v, pl_t, ()))
+		D.Const ([], true, v, pl_t, ()))
 		vars
 	@ [ D.Axiom ([], E.forall ["p",pl_t]
 		(E.disj <| List.map (fun v -> E.ident "p" |=| E.ident v) vars)) ]
 
 	(* The list of transitions *)
-	@ (List.map (fun t -> D.Const ([], false, t, tx_t, ())) txs)
+	@ (List.map (fun t -> D.Const ([], true, t, tx_t, ())) txs)
 	@ [ D.Axiom ([], E.forall ["t",tx_t]
 		(E.disj 
 			<< List.cons (E.ident "t" |=| E.ident "init")
@@ -104,7 +104,7 @@ let program k (vars,rules,init,target) =
 		Some (E.sum <| List.map (fun v -> E.Sel (E.ident "m", [E.ident v])) vars) ) ]
 		
 	@ P.parse "
-		procedure {:inline 5} P ( t0: transition, p0: marking ) returns ( purse: marking )
+		procedure {:inline 1} P ( t0: transition, p0: marking ) returns ( purse: marking )
 		{
 			var frame, frame_, purse_: marking;
 			var t: transition;

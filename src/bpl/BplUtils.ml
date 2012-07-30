@@ -13,10 +13,15 @@ end
 module Statement = struct
 	include Statement
 	module A = Attribute
-	let skip = Call ([A.bool "skip" true], "skip", [], [])
-	let yield = Call ([A.bool "yield" true], "yield", [], [])
-	let post n ps = Call ([A.bool "async" true],n,ps,[])
+	let skip = Call ([A.unit "skip"], "skip", [], [])
+  let annot ax = Assume (ax, Expression.bool true)
+	let yield = Call ([A.unit "yield"], "yield", [], [])
+	let post n ps = Call ([A.unit "async"],n,ps,[])
 	
+  let is_annot ax = 
+    function Assume (ax', _) -> List.exists (fun a -> List.mem a ax) ax' 
+    | _ -> false
+  
 	let is_yield = 
 		function Call (ax,"yield",[],[]) when A.has "yield" ax -> true
 		| _ -> false
@@ -48,8 +53,8 @@ module LabeledStatement = struct
 	let skip = stmt (S.skip)
 	let havoc xs = stmt (S.Havoc xs)
 	let assign xs es = stmt (S.Assign (xs,es))
-	let assert_ e = stmt (S.Assert e)
-	let assume e = stmt (S.Assume e)
+	let assert_ e = stmt (S.Assert ([],e))
+	let assume e = stmt (S.Assume ([],e))
 	let ifthenelse e ss ts = stmt (S.If (Some e,ss,ts))
 	let ifthen e ss = ifthenelse e ss []
 	let ifstar ss = stmt (S.If (None,ss,[]))
@@ -59,6 +64,9 @@ module LabeledStatement = struct
 	let return = stmt S.Return
 	let post p ps = stmt (S.post p ps)
 	let yield = stmt (S.yield)
+  
+  let annotate ax = stmt (S.Assume (ax, Expression.bool true))
+  let is_annot ax (_,s) = S.is_annot ax s
 	
 	let is_yield (_,s) = S.is_yield s
 	let is_short_yield (_,s) = S.is_short_yield s
@@ -100,6 +108,11 @@ module Expression = struct
 	include Expression
 	
 	let sel e es = Sel (e,es)
+
+  let negate e = 
+    match e with
+    | Not e' -> e'
+    | _ -> Not e
 	
 	let sum es = 
 		match es with

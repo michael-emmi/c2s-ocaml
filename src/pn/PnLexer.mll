@@ -77,7 +77,7 @@ let boolean_lit = "true" | "false"
 let numeric_lit = decimal_lit | hex_integer_lit
 
 
-let line_comment = "//" [^ '\n']*
+let line_comment = "#" [^ '\n']*
 let comment_start = "/*"
 let comment_end = "*/"
 
