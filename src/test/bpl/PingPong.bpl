@@ -7,8 +7,9 @@
  */
 
 var b: bool;
+var c: bool;
 
-procedure main ()
+procedure Main ()
 {
 	b := false;
 	call {:async} Ping ();

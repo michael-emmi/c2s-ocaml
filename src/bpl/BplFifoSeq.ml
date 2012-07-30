@@ -36,14 +36,17 @@ let phase_bounding_without_delays k p =
   (* let pid_vec_t t = Type.Map ([], [Tr.pid_type], Type.Int) in *)
   let rnd_vec_t t = Type.Map ([], [Type.Int], t) in
     
-  let init_predicate = List.map (fun g -> Ls.assume (repl_var g $=$ init_var g)) gvars
+  let init_predicate = 
+    List.map (fun g -> 
+      Ls.assume (repl_var g $=$ init_var g)) 
+    <| gvars
   and validity_predicate = 
-    ( List.map (fun i -> 
-        Ls.assume
-        << E.conj
+    List.flatten
+    << List.map (fun i -> 
+        List.map Ls.assume
      		<< List.map (fun g -> repl g (E.num (i-1)) |=| init g (E.num i))
      		<| gvars )
-     		<| List.range 1 (phases-1) )
+     		<| List.range 1 (phases-1)
   in
 
   let post_to_call_no_globals s =
@@ -447,7 +450,7 @@ let phase_bounding_with_delays k delay p =
 		<< id )
 	<| p
 
-let phase_bounding k delay p =
+let phase_bounding phases delay p =
   ( if delay > 0 
-    then phase_bounding_with_delays k delay 
-    else phase_bounding_without_delays k) p
+    then phase_bounding_with_delays (phases-1) delay 
+    else phase_bounding_without_delays (phases-1)) p

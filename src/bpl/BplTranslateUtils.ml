@@ -37,7 +37,7 @@ let inline_procs =
 let seq_framework  =   
   Program.translate
     ~new_global_decls: [ 
-      D.Var ([A.unit "leavealone"],err_flag,T.Int,None) ;
+      D.Var ([A.unit "leavealone"],err_flag,T.Bool,None) ;
       D.Proc ([A.unit "leavealone"], top_proc_name, (
         [],[],[],[],[],(
           (E.ident err_flag |:=| E.bool false)
