@@ -2,6 +2,7 @@ open Prelude
 open Printf
 
 open BplUtils
+open BplUtils.Abbreviations
 open BplUtils.Operators
 
 module P = Cfg.Production

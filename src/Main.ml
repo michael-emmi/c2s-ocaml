@@ -3,9 +3,6 @@
 open Prelude
 open Printf
 
-module PP = PrettyPrinting
-open PP
-
 module Op = Options
 
 type ast = 
@@ -17,10 +14,10 @@ type ast =
 
 let print_to_file f d =
 	match f with
-	| "-" -> output_string stdout << render <| d;
+	| "-" -> output_string stdout << PrettyPrinting.render <| d;
 	| _ -> begin
 		  let oc = open_out f in
-		  output_string oc << render <| d;
+		  output_string oc << PrettyPrinting.render <| d;
 		  close_out oc
 	  end	
 	
@@ -37,7 +34,9 @@ let parse_program src =
 		BP (ParsingUtils.parse_file BpParser.program_top BpLexer.token src)
 
 	else if Filename.check_suffix src ".bpl" then
-		BPL (ParsingUtils.parse_file BplParser.program_top BplLexer.token src)
+		BPL ( BplUtils.Program.post_parsing
+          << ParsingUtils.parse_file BplParser.program_top BplLexer.token 
+          <| src )
 		
 	else if Filename.check_suffix src ".spec" then
 		PN (ParsingUtils.parse_file PnParser.program_top PnLexer.token src)
@@ -65,7 +64,7 @@ let _ =
 
 			(* Back-end necessitites *)
 			| BP p, ("prepare-for-back-end",_) -> BP (BpUtils.prepare_for_back_end p)
-			| BPL p, ("prepare-for-back-end",_) -> BPL (BplUtils.prepare_for_back_end p)
+			| BPL p, ("prepare-for-back-end",_) -> BPL (BplUtils.Program.pre_boogie p)
 			
       | BPL p, ("seq-framework",_) -> BPL (BplSeqFramework.seq_framework p)
 			| BPL p, ("esc-async",_) -> BPL (BplEscAsync.async_to_seq p)	

@@ -1,12 +1,9 @@
 open Prelude
 open Printf
 open BplUtils.Operators
+open BplUtils.Abbreviations
 
 module Pn = PnAst
-
-module T = BplAst.Type
-module E = BplUtils.Expression
-module P = BplUtils.Program
 
 let pl_t = T.T ("place",[])
 let tx_t = T.T ("transition",[])
@@ -49,7 +46,7 @@ let rule vars idx (guards,updates) =
 let program k (vars,rules,init,target) =
 	let txs = List.mapi (fun i _ -> sprintf "t%n" (i+1)) rules in
 	
-	P.parse "
+	Pg.parse "
 		type place;
 		type transition;
 		type marking = [place] int;
@@ -103,7 +100,7 @@ let program k (vars,rules,init,target) =
 	@ [ D.Func ([], "size", [], [ Some "m", mark_t ], (None, T.Int), 
 		Some (E.sum <| List.map (fun v -> E.Sel (E.ident "m", [E.ident v])) vars) ) ]
 		
-	@ P.parse "
+	@ Pg.parse "
 		procedure {:inline 1} P ( t0: transition, p0: marking ) returns ( purse: marking )
 		{
 			var frame, frame_, purse_: marking;

@@ -76,7 +76,10 @@ seq = "#{name}.#{delays}-delay.bpl"
 puts "Sequentializing #{name} with #{delays}-delay translation."
 puts "-- Rounds: #{rounds}"
 puts "-- Delays: #{delays}"
-`#{c2s} #{comp} --delay-bounding #{rounds} #{delays} --prepare-for-back-end --print #{seq}`
+cmd = "#{c2s} #{comp} --delay-bounding #{rounds} #{delays} --prepare-for-back-end --print #{seq}"
+
+puts "#{cmd}"
+puts `#{cmd}`
 
 puts "Verifying #{seq} with Boogie..."
 puts "-- StratifiedInline"

@@ -4,8 +4,8 @@ open Prelude
 open PrettyPrinting
 open Printf
 open BplAst
-open BplUtils
-open Operators
+open BplUtils.Operators
+open BplUtils.Abbreviations
 
 module Tr = BplSeqFramework
 
@@ -24,7 +24,7 @@ let phase_bounding_without_delays k p =
 
 	let repl g e = E.sel (E.ident <| repl_var g) [e] in
   let init g e = E.sel (E.ident <| init_var g) [e] in
-
+  
   let gvars =
     List.map D.name
     << List.filter (function 
@@ -35,6 +35,16 @@ let phase_bounding_without_delays k p =
 	
   (* let pid_vec_t t = Type.Map ([], [Tr.pid_type], Type.Int) in *)
   let rnd_vec_t t = Type.Map ([], [Type.Int], t) in
+  
+  let proc_begin_stmts = 
+    List.flatten
+    << List.map (fun g -> E.ident g |:=| repl g (E.ident phase_var))
+    <| gvars
+  and proc_end_stmts =
+    List.flatten
+    << List.map (fun g -> repl g (E.ident phase_var) |:=| E.ident g)
+    <| gvars
+  in
     
   let init_predicate = 
     List.map (fun g -> 
@@ -90,8 +100,12 @@ let phase_bounding_without_delays k p =
     | ls, S.Call (ax,_,_,_) when A.has "leavealone" ax -> [s]
     | ls, S.Call (ax,n,ps,rs) when n = Tr.main_proc_name ->
       [ ls, S.Call (ax,n,ps@[E.num 0],rs) ]
-    (* | ls, S.Call (ax,n,ps,rs) when not (List.mem n Tr.aux_procs) -> *)
-      (* [ ls, S.Call (ax,n,ps@[E.ident phase_var],rs)] *)
+      
+    | ls, S.Call (ax,n,ps,rs) ->
+      Ls.add_labels ls proc_end_stmts
+      @ [ [], S.Call (ax,n,ps@[E.ident phase_var],rs)]
+      @ proc_begin_stmts      
+      
 		| _ -> [s]    
     
   and predicates s =
@@ -160,18 +174,14 @@ let phase_bounding_without_delays k p =
 				(fun (ax,n,_) ->
 					if A.has "leavealone" ax then []
           else if List.mem n [] then []
-					else List.flatten 
-            << List.map (fun g -> E.ident g |:=| repl g (E.ident phase_var)) 
-            <| gvars
+					else proc_begin_stmts
         )
 
   		~proc_body_suffix: 
   			(fun (ax,n,_) ->
   				if A.has "leavealone" ax then []
           else if List.mem n [] then []
-  				else List.flatten 
-            << List.map (fun g -> repl g (E.ident phase_var) |:=| E.ident g) 
-            <| gvars
+  				else proc_end_stmts
         )
           
       ~per_stmt_map: 

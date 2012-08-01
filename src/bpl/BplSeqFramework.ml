@@ -1,10 +1,9 @@
-
 open Prelude
 open PrettyPrinting
 open Printf
 open BplAst
-open BplUtils
-open Operators
+open BplUtils.Operators
+open BplUtils.Abbreviations
 
 let main_proc = "main"
 let real_main_proc = "__XX__main"

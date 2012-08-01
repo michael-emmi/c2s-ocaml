@@ -4,8 +4,8 @@ open Prelude
 open PrettyPrinting
 open Printf
 open BplAst
-open BplUtils
-open Operators
+open BplUtils.Operators
+open BplUtils.Abbreviations
 
 module Tr = BplSeqFramework
 
@@ -96,7 +96,7 @@ let delay_bounding rounds delays pgm =
 						<| gs )
 				  	<| List.range 1 (rounds-1) )
 					
-				@ [ Ls.assert_ (!| (E.ident err_flag)) ;
+				@ [ Ls.assume (E.ident err_flag) ;
 					Ls.return ]
 			) 
 			))

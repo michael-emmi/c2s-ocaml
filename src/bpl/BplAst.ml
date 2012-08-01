@@ -510,7 +510,7 @@ and LabeledStatement : sig
 	val fold_stmts : ('a -> t -> 'a) -> 'a -> t list -> 'a
 	
 	val contains_rec : (t -> bool) -> t list -> bool
-		
+  		
 	val to_string : t -> string
 	val print : t -> PrettyPrinting.doc
 	val print_seq : t list -> PrettyPrinting.doc
@@ -838,12 +838,35 @@ end = struct
 	let print_seq = vcat << List.map print
 end
 
-module Program = struct
-	module D = Declaration
+module Program : sig
+	type t = Declaration.t list
+  val decls : t -> Declaration.t list
+  val fold : ('a -> Declaration.t -> 'a) -> 'a -> t -> 'a
+  val find : t -> Identifier.t -> Declaration.t option
+  val find_proc : t -> Identifier.t -> Procedure.t option
+  val fold_procs : ('a -> Procedure.t -> 'a) -> 'a -> t -> 'a
+  val fold_stmts : ('a -> LabeledStatement.t -> 'a) -> 'a -> t -> 'a
+  val map_procs : (Procedure.t -> Procedure.t) -> t -> t
+  val map_stmts : (Identifier.t -> LabeledStatement.t -> LabeledStatement.t list) -> t -> t
+  (* val fold_over_calls : t -> ('a -> Procedure.t -> 'a) -> 'a -> LabeledStatement.t list -> 'a *)
+  val translate : 
+    ?replace_global_decls: (Declaration.t -> Declaration.t list) ->
+    ?new_global_decls: Declaration.t list ->
+    ?new_proc_params: (Attribute.t list * Identifier.t * Procedure.t -> (Identifier.t * Type.t) list) ->
+    ?new_proc_rets: (Attribute.t list * Identifier.t * Procedure.t -> (Identifier.t * Type.t) list) ->
+    ?new_local_decls: (Attribute.t list * Identifier.t * Procedure.t -> Declaration.t list) ->
+    ?proc_body_prefix: (Attribute.t list * Identifier.t * Procedure.t -> LabeledStatement.t list) ->
+    ?proc_body_suffix: (Attribute.t list * Identifier.t * Procedure.t -> LabeledStatement.t list) ->
+    ?per_stmt_map: (Identifier.t -> LabeledStatement.t -> LabeledStatement.t list) ->
+    ?per_expr_map: (Identifier.t -> Expression.t -> Expression.t) ->
+    t -> t
+  val print : t -> PrettyPrinting.doc
+
+end = struct
 	module Ls = LabeledStatement
 	module S = Specification
 
-	type t = D.t list
+	type t = Declaration.t list
 	
 	let decls = id
 
@@ -851,9 +874,9 @@ module Program = struct
 	let map_fold_procs fn a =
 		map_fold ( fun a d ->
 			match d with
-			| D.Proc (ax,n,p) -> 
+			| Declaration.Proc (ax,n,p) -> 
 				let a, p = fn a (n,p) in
-				a, D.Proc (ax,n,p)
+				a, Declaration.Proc (ax,n,p)
 		  	| d -> a, d ) a
 	let map_fold_stmts fn a = 
 		map_fold_procs (fun a (n,p) -> Procedure.map_fold_stmts (fn n) a p) a
@@ -871,13 +894,13 @@ module Program = struct
 
 	let map_exprs fn = 
 		List.map (
-			function D.Axiom (ax,e) -> D.Axiom (ax, Expression.map (fn "") e)
-			| D.Func (ax,f,tx,ps,r,e) -> 
-				D.Func (ax,f,tx,ps,r, Option.map (Expression.map (fn "")) e)
-			| D.Var (ax,n,t,e) -> 
-				D.Var (ax,n,t,Option.map (Expression.map (fn n)) e)
-			| D.Proc (ax,n,p) -> D.Proc (ax,n,Procedure.map_exprs (fn n) p)
-			| D.Impl (ax,n,p) -> D.Impl (ax,n,Procedure.map_exprs (fn n) p)
+			function Declaration.Axiom (ax,e) -> Declaration.Axiom (ax, Expression.map (fn "") e)
+			| Declaration.Func (ax,f,tx,ps,r,e) -> 
+				Declaration.Func (ax,f,tx,ps,r, Option.map (Expression.map (fn "")) e)
+			| Declaration.Var (ax,n,t,e) -> 
+				Declaration.Var (ax,n,t,Option.map (Expression.map (fn n)) e)
+			| Declaration.Proc (ax,n,p) -> Declaration.Proc (ax,n,Procedure.map_exprs (fn n) p)
+			| Declaration.Impl (ax,n,p) -> Declaration.Impl (ax,n,Procedure.map_exprs (fn n) p)
 			| d -> d
 		) 
 
@@ -885,15 +908,15 @@ module Program = struct
 		List.fold_left
 			(fun a d ->
 				 match d with
-				 | D.Proc (ax,n,p) -> fn a p
+				 | Declaration.Proc (ax,n,p) -> fn a p
 				 | _ -> a)
 			
-	let find p n = List.first ((=) n << D.name) p
+	let find p n = List.first ((=) n << Declaration.name) p
 	let find_proc p n =
-		Option.seq (function D.Proc (_,_,p) -> Some p | _ -> None)
-		<| List.first ((=) n << D.name 
-			&&&& (function D.Proc _ -> true | _ -> false)) p
-		
+		Option.seq (function Declaration.Proc (_,_,p) -> Some p | _ -> None)
+		<| List.first ((=) n << Declaration.name 
+			&&&& (function Declaration.Proc _ -> true | _ -> false)) p
+
 	let translate
 		?(replace_global_decls = List.unit)
 		?(new_global_decls = [])
@@ -907,63 +930,30 @@ module Program = struct
 		
 		List.append new_global_decls
 		<< List.flatten << map (
-			function D.Proc (ax,n,((ts,ps,rs,es,ds,ss) as p)) ->
+			function Declaration.Proc (ax,n,((ts,ps,rs,es,ds,ss) as p)) ->
 				let ps' = ps @ new_proc_params (ax,n,p)
 				and rs' = rs @ new_proc_rets (ax,n,p)
 				and ds' = ds @ new_local_decls (ax,n,p) in
         
-        (* Add the suffix just before each return statement. *)
-        let ss = snd << Ls.map_fold_stmts (
-          fun () s -> 
-            match s with
-            | ls, Statement.Return -> (), proc_body_suffix (ax,n,p) @ [s]
-            | _ -> (), [s]
-        ) () <| ss in
-        
-        (* Add the suffix as the last statement(s) if the procedure
-          does not end with a return. *)
-				let ss' = proc_body_prefix (ax,n,p) @ ss 
-          @ ( match List.last ss with _, Statement.Return -> []
-              | _ -> proc_body_suffix (ax,n,p) )
-              
-				in D.Proc (ax,n,(ts,ps',rs',es,ds',ss')) :: []
+        (* Add the suffix just before each return statement.
+          Note: we assume each procedure ends with a return. *)
+        let ss' = 
+          List.append (proc_body_prefix (ax,n,p))
+          << snd << Ls.map_fold_stmts
+            ( fun () s -> 
+              match s with
+              | ls, Statement.Return -> (), proc_body_suffix (ax,n,p) @ [s]
+              | _ -> (), [s] )
+            () <| ss 
+            
+				in Declaration.Proc (ax,n,(ts,ps',rs',es,ds',ss')) :: []
 			| d -> d :: [] )
 		<< List.flatten << map replace_global_decls
 		<< map_stmts (per_stmt_map)
 		<< map_exprs (per_expr_map)	
-		
-	
-		(* ?(rem_global_decls = []) *)
-		(* ?(map_global_decls = List.unit) *)
-		(* ?(rename_global_decls = id) *)
-		(* ?(add_global_decls = []) *)
-		(* ?(add_proc_params = const []) *)
-		(* ?(add_local_decls = const []) *)
-		(* ?(add_proc_rets = const []) *)
-		(* ?(proc_body_prefix = const []) *)
-		(* ?(proc_body_suffix = const []) *)
-		(* ?(per_stmt_map = fun i -> List.unit) *)
-		(* ?(per_expr_map = fun i -> id) = *)
-
-		(* add_decls add_global_decls
-		<< map_decls (fun d ->
-			match d with
-			| D.Proc (ax,n,((ps,ts,rs,es,ds,ss) as p)) -> 
-				let ps' = ps @ add_proc_params (n,p)
-				and ts' = ts @ add_proc_rets (n,p)
-				and ds' = ds @ add_local_decls (n,p)
-				and ss' = proc_body_prefix (n,p) @ ss @ proc_body_suffix (n,p)
-				in D.Proc (ax,n,(ps',ts',rs,es,ds',ss')) :: [] 
-			| d -> d :: [])
-		<< List.map (fun d -> Declaration.map_lvals (Lv.lift << per_expr_map <| D.name d) d)
-		<< List.map (fun d -> Declaration.map_exprs (per_expr_map <| D.name d) d)
-		<< List.map (fun d -> Declaration.map_stmts (per_stmt_map <| D.name d) d)
-		<< map_decls map_global_decls
-		<< map_decls (List.unit << Declaration.rename rename_global_decls)
-		<< rem_decls rem_global_decls	 *)
 
 	open PrettyPrinting
-	let print p = (vcat << List.map D.print <| p) $+$ empty
+	let print p = (vcat << List.map Declaration.print <| p) $+$ empty
 	let to_string = render << print
 end
 

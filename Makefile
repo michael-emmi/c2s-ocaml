@@ -54,7 +54,7 @@ CAML_COMMON_EXE_OBJ =
 
 OS=$(shell uname -a)
 
-ifeq ($(OS), $(filter $(OS), Cygwin Mingw))
+ifeq (1, $(words $(filter $(OS), Cygwin Mingw)))
 	CAML_EXE = $(NAME).exe
 else
 	CAML_EXE = $(NAME)

@@ -3,10 +3,7 @@ open PrettyPrinting
 open Printf
 open BplAst
 open BplUtils
-
-module A = Attribute
-module E = Expression
-module Sp = Specification
+open BplUtils.Abbreviations
 
 let instrument k p =
 	

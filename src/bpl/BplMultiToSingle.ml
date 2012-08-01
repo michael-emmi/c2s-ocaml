@@ -2,8 +2,8 @@ open Prelude
 open PrettyPrinting
 open Printf
 open BplAst
-open BplUtils
-open Operators
+open BplUtils.Operators
+open BplUtils.Abbreviations
 
 module Tr = BplSeqFramework
 
