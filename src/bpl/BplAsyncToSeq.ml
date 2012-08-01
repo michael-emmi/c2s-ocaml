@@ -5,6 +5,7 @@ open PrettyPrinting
 open Printf
 open BplAst
 open BplUtils.Operators
+open BplUtils.Extensions
 open BplUtils.Abbreviations
 
 module Tr = BplSeqFramework
@@ -84,7 +85,7 @@ let delay_bounding rounds delays pgm =
 				@ (E.ident err_flag |:=| E.bool false)
 				@ [ Ls.assume (gs $==$ init_gs) ]
 				@ (next_gs $::=$ guess_gs)
-				@ [ Ls.call main_proc [E.num 0] [];
+				@ [ Ls.call main_proc ~params:[E.num 0];
 					Ls.assume (gs $==$ guess_gs) ]
 					
 				@ ( List.map (fun i -> 
@@ -97,7 +98,7 @@ let delay_bounding rounds delays pgm =
 				  	<| List.range 1 (rounds-1) )
 					
 				@ [ Ls.assume (E.ident err_flag) ;
-					Ls.return ]
+					Ls.return () ]
 			) 
 			))
 		]
@@ -111,15 +112,15 @@ let delay_bounding rounds delays pgm =
 	in
 	
 	let translate_yield s =
-		if Ls.is_yield s then [
-			( if Ls.is_short_yield s then Ls.ifstar else Ls.whilestar ) (
-				Ls.add_labels [delay_label ()] [
-					Ls.assume (E.ident round_idx |<| E.ident rounds_const) ;
-					Ls.assume (E.ident delays_var |<| E.ident delays_const) ;
-					Ls.incr (E.ident round_idx) ; 
-				    Ls.incr (E.ident delays_var) ]
-			)
-		] else [s]
+		if Ls.is_yield s then
+      let ss = [
+				Ls.assume ~labels:[delay_label ()] (E.ident round_idx |<| E.ident rounds_const) ;
+				Ls.assume (E.ident delays_var |<| E.ident delays_const) ;
+				Ls.incr (E.ident round_idx) ; 
+				Ls.incr (E.ident delays_var) 
+      ]
+			in [ if Ls.is_short_yield s then Ls.ifthenelse ss else Ls.whiledo ss ]
+		else [s]
 
 	and translate_call s =
 		match s with
@@ -159,7 +160,7 @@ let delay_bounding rounds delays pgm =
 		| ls, S.Assert (_,e) -> 
 			Ls.add_labels ls 
 			<< List.singleton
-			<< Ls.ifthen (E.ident round_idx |<| E.ident rounds_const)
+			<< Ls.ifthenelse ~expr:(E.ident round_idx |<| E.ident rounds_const)
 			<| (E.ident err_flag |:=| ( E.ident err_flag ||| !| e ))
 		| _ -> [s]
 	
@@ -181,18 +182,15 @@ let delay_bounding rounds delays pgm =
 		id
 		
 		<< Program.translate
+      ~ignore_attrs: ["leavealone"]
 			~new_global_decls: ( init_decls @ next_decls @ new_decls )
 			~per_stmt_map: (const (translate_post <=< translate_assert))
 			
-			~new_proc_params: 
-				(fun (ax,n,_) ->
-					if A.has "leavealone" ax then []
-					else [init_round_idx, T.Int] )
+			~new_proc_params: (const [init_round_idx, T.Int])
 								
 			~new_local_decls: 
-				(fun (ax,n,_) -> 
-					if A.has "leavealone" ax then []
-					else match Program.find_proc pgm n with
+				(fun d -> 
+					match Program.find_proc pgm (D.name d) with
 					| Some p when Ls.contains_rec is_async_call (Procedure.stmts p) ->
 						save_decls @ guess_decls
 					| _ -> [] )
@@ -205,17 +203,11 @@ let delay_bounding rounds delays pgm =
 
 		<< Program.translate
 			~replace_global_decls: (fun d -> vectorize_var_decl d :: [])
-			~new_local_decls: 
-				(fun (ax,_,p) ->  
-					if A.has "leavealone" ax then []
-					else [D.Var ([], round_idx, T.Int, None)])
-			~proc_body_prefix: 
-				(fun (ax,_,_) ->
-					if A.has "leavealone" ax then []
-					else (round_idx $:=$ init_round_idx ))
+			~new_local_decls: (const [D.var round_idx T.Int])
+			~proc_body_prefix: (const (round_idx $:=$ init_round_idx))
 			~per_stmt_map: (const (translate_call <=< translate_yield))
-			~per_expr_map: (fun n -> if n == top_proc then id else vectorize_expr)			
-		
+			~per_expr_map: (const vectorize_expr)
+
 	)
 	<| pgm
 	

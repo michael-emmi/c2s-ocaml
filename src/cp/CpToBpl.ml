@@ -82,7 +82,7 @@ let rec lval lv = match lv with
 module S = CpAst.Statement
 module Ls = CpAst.LabeledStatement
 module SS = BplAst.Statement
-module LLs = BplUtils.LabeledStatement
+module LLs = BplUtils.LabeledStatementExt
 let rec stmt s =
 	match s with
 	| Ls.S (ls,s) -> begin

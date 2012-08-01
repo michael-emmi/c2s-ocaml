@@ -23,6 +23,9 @@ module Type = struct
 	type t = Bool | Int | Bv of int
 			 | T of Identifier.t * t list
 			 | Map of Identifier.t list * t list * t
+       
+  let t ?type_vars:tx id = T (id, Option.list tx)
+  let map ?type_vars:tx ts t = Map (Option.list tx, ts, t)
 			
 	open PrettyPrinting
 	let print_type_args = List.reduce (angles << Identifier.print_seq ) empty
@@ -33,8 +36,8 @@ module Type = struct
 		| T (x,tx) ->
 			  Identifier.print x
 			  <+> sep (List.map print tx)
-		| Map (ax,ts,t) ->
-			  print_type_args ax <+> brackets (print_seq ts) <+> print t
+		| Map (tx,ts,t) ->
+			  print_type_args tx <+> brackets (print_seq ts) <+> print t
 	and print_seq ts = sep << punctuate comma << List.map print <| ts
 	let print_typed_ids =
 		sep << punctuate comma
@@ -120,6 +123,7 @@ module rec Expression : sig
 	val to_string : t -> string
 	val print : t -> PrettyPrinting.doc
 	val print_seq : t list -> PrettyPrinting.doc
+  
 end = struct
 	type q = Forall | Exists
 	type t = Lit of Literal.t
@@ -153,6 +157,7 @@ end = struct
 		| [] -> bool true
 		| e :: [] -> e
 		| e :: es -> List.fold_left (fun e f -> Bin (And, e, f)) e es
+    
 	let disj = function
 		| [] -> bool false
 		| e :: [] -> e
@@ -503,6 +508,19 @@ and LabeledStatement : sig
 	type t = Identifier.t list * Statement.t
 	
 	val stmt : Statement.t -> t
+  
+  val havoc : ?labels:Identifier.t list -> Identifier.t list -> t
+  val assign : ?labels:Identifier.t list -> Lvalue.t list -> Expression.t list -> t
+  val assert_ : ?labels:Identifier.t list -> ?attrs:Attribute.t list -> Expression.t -> t
+  val assume : ?labels:Identifier.t list -> ?attrs:Attribute.t list -> Expression.t -> t
+  val ifthenelse : ?labels:Identifier.t list -> ?expr:Expression.t -> ?els:(t list) -> t list -> t
+  val whiledo : ?labels:Identifier.t list -> ?expr:Expression.t -> 
+    ?invariants:(Expression.t * bool) list -> 
+    t list -> t
+  val call : ?labels:Identifier.t list -> ?attrs:Attribute.t list ->
+    ?params:Expression.t list -> ?returns:Identifier.t list -> 
+    Identifier.t -> t
+  val return : ?labels:Identifier.t list -> unit -> t
 
 	val map_fold_stmts : ('a -> t -> 'a * t list) -> 'a -> t list -> 'a * t list
 	val map_fold_exprs : ('a -> Expression.t -> 'a * Expression.t) -> 'a -> t -> 'a * t
@@ -519,7 +537,21 @@ end = struct
 
 	open Statement
 	
-	let stmt s = ([],s)
+  let stmt s = [], s  
+	
+  let havoc ?labels:ls xs = Option.list ls, Statement.Havoc xs
+	let assign ?labels:ls xs es = Option.list ls, Statement.Assign (xs,es)
+	let assert_ ?labels:ls ?attrs:ax e = 
+    Option.list ls, Statement.Assert (Option.list ax,e)
+	let assume ?labels:ls ?attrs:ax e = 
+    Option.list ls, Statement.Assume (Option.list ax,e)
+	let ifthenelse ?labels:ls ?expr:e ?els:ts ss = 
+    Option.list ls, Statement.If (e,ss,Option.list ts)
+	let whiledo ?labels:ls ?expr:e ?invariants:es ss = 
+    Option.list ls, Statement.While (e,Option.list es,ss)
+	let call ?labels:ls ?attrs:ax ?params:ps ?returns:xs p = 
+    Option.list ls, Statement.Call (Option.list ax,p,Option.list ps,Option.list xs)
+	let return ?labels:ls () = Option.list ls, Statement.Return
 
 	let rec map_fold_stmts fn a ss =
 		Tup2.map id List.flatten 
@@ -605,9 +637,12 @@ module rec Procedure : sig
 
 	val signature : t -> Type.t list * Type.t list
 	val stmts : t -> LabeledStatement.t list
-	val map_fold_stmts : 
-		('a -> LabeledStatement.t -> 'a * LabeledStatement.t list) -> 'a -> t -> 'a * t
 	val map_exprs : (Expression.t -> Expression.t) -> t -> t
+  
+  val map_fold_stmts : 
+    ('a -> LabeledStatement.t -> 'a * LabeledStatement.t list) -> 
+    'a -> t -> 'a * t
+
 	val print : bool -> Attribute.t list -> Identifier.t -> t -> PrettyPrinting.doc
 	val to_string : bool -> Attribute.t list -> Identifier.t -> t -> string
 		
@@ -624,15 +659,15 @@ end = struct
 	let signature (_,ps,rs,_,_,_) = List.map snd ps, List.map snd rs
 	let stmts (_,_,_,_,_,ss) = ss
 
-	let map_fold_stmts fn a (tx,ps,rs,sx,ds,ss) =
-		let a, ss = LabeledStatement.map_fold_stmts fn a ss in
-		a, (tx,ps,rs,sx,ds,ss)
-
 	let map_exprs fn (tx,ps,rs,sx,ds,ss) =
 		tx,ps,rs,
 		List.map (Specification.map_exprs fn) sx,
 		ds,
 		List.map (Ls.map_exprs fn) ss
+    
+  let map_fold_stmts fn a (tx,ps,rs,sx,ds,ss) =
+    let a, ss = Ls.map_fold_stmts fn a ss in
+    a, (tx,ps,rs,sx,ds,ss)
 
 	open PrettyPrinting
 	let print impl ats n (ts,ps,rs,es,ds,ss) =
@@ -658,7 +693,7 @@ end
 and Declaration : sig
 	type t = 
 		| TypeCtor of Attribute.t list
-			  * bool
+			  * bool (* finite -- note this doesn't work anymore in Boogie. *)
 			  * Identifier.t
 			  * Identifier.t list
 		| TypeSyn of Attribute.t list
@@ -685,17 +720,20 @@ and Declaration : sig
 			  * Identifier.t 
 			  * Procedure.t
 			
-  val type_ : Identifier.t -> t
-	val var : Identifier.t -> Type.t -> t
-	val const : Identifier.t -> Type.t -> t
-  val uniq_const : Identifier.t -> Type.t -> t
-	val axiom : Expression.t -> t
+  val type_ : ?attrs:Attribute.t list -> ?ctor_args:Identifier.t list -> 
+    Identifier.t -> t    
+	val var : ?attrs:Attribute.t list -> ?where_clause:Expression.t ->
+    Identifier.t -> Type.t -> t    
+	val const : ?attrs:Attribute.t list -> ?unique:bool -> 
+    Identifier.t -> Type.t -> t    
+	val axiom : ?attrs:Attribute.t list -> Expression.t -> t
 
+  val attrs : t -> Attribute.t list
 	val name : t -> Identifier.t
 	val rename : (Identifier.t -> Identifier.t) -> t -> t
 	val kind : t -> string
 	val to_const : t -> t
-	
+  
 	val to_string : t -> string
 	val print : t -> PrettyPrinting.doc
 	val print_seq : t list -> PrettyPrinting.doc
@@ -727,11 +765,15 @@ end = struct
 			  * Identifier.t 
 			  * Procedure.t 
 			
-  let type_ t = TypeCtor ([],false,t,[])
-	let var s t = Var ([],s,t,None)
-	let const s t = Const ([],false,s,t,())
-  let uniq_const s t = Const ([],true,s,t,())
-	let axiom e = Axiom ([],e)
+  let type_ ?attrs:ax ?ctor_args:cs t = TypeCtor (Option.list ax, false, t, Option.list cs)
+  let var ?attrs:ax ?where_clause:wc s t = Var (Option.list ax,s,t,wc)
+	let const ?attrs:ax ?unique:u s t = Const (Option.list ax, Option.bool u, s, t, ())
+	let axiom ?attrs:ax e = Axiom (Option.list ax, e)
+  
+  let attrs = function
+		| TypeCtor (ax,_,_,_) | TypeSyn (ax,_,_,_) | Const (ax,_,_,_,_)
+    | Func (ax,_,_,_,_,_)	| Var (ax,_,_,_) | Proc (ax,_,_) | Impl (ax,_,_) 
+    | Axiom (ax,_) -> ax
 
 	let name = function
 		| TypeCtor _ -> "type"
@@ -761,7 +803,6 @@ end = struct
 		| Var _ -> "var"
 		| Proc _ -> "proc"
 		| Impl _ -> "impl"
-		
 		
 	let to_const = function
 		| Var (ax,n,t,e) ->
@@ -840,26 +881,19 @@ end
 
 module Program : sig
 	type t = Declaration.t list
+  
   val decls : t -> Declaration.t list
+  val global_vars : t -> Declaration.t list
+  val procs : t -> Declaration.t list
+  
+  val map : (Declaration.t -> 'a) -> t -> 'a list
   val fold : ('a -> Declaration.t -> 'a) -> 'a -> t -> 'a
-  val find : t -> Identifier.t -> Declaration.t option
-  val find_proc : t -> Identifier.t -> Procedure.t option
+  (*   val find : t -> Identifier.t -> Declaration.t option
+    val find_proc : t -> Identifier.t -> Procedure.t option *)
   val fold_procs : ('a -> Procedure.t -> 'a) -> 'a -> t -> 'a
   val fold_stmts : ('a -> LabeledStatement.t -> 'a) -> 'a -> t -> 'a
   val map_procs : (Procedure.t -> Procedure.t) -> t -> t
-  val map_stmts : (Identifier.t -> LabeledStatement.t -> LabeledStatement.t list) -> t -> t
-  (* val fold_over_calls : t -> ('a -> Procedure.t -> 'a) -> 'a -> LabeledStatement.t list -> 'a *)
-  val translate : 
-    ?replace_global_decls: (Declaration.t -> Declaration.t list) ->
-    ?new_global_decls: Declaration.t list ->
-    ?new_proc_params: (Attribute.t list * Identifier.t * Procedure.t -> (Identifier.t * Type.t) list) ->
-    ?new_proc_rets: (Attribute.t list * Identifier.t * Procedure.t -> (Identifier.t * Type.t) list) ->
-    ?new_local_decls: (Attribute.t list * Identifier.t * Procedure.t -> Declaration.t list) ->
-    ?proc_body_prefix: (Attribute.t list * Identifier.t * Procedure.t -> LabeledStatement.t list) ->
-    ?proc_body_suffix: (Attribute.t list * Identifier.t * Procedure.t -> LabeledStatement.t list) ->
-    ?per_stmt_map: (Identifier.t -> LabeledStatement.t -> LabeledStatement.t list) ->
-    ?per_expr_map: (Identifier.t -> Expression.t -> Expression.t) ->
-    t -> t
+  
   val print : t -> PrettyPrinting.doc
 
 end = struct
@@ -869,6 +903,8 @@ end = struct
 	type t = Declaration.t list
 	
 	let decls = id
+  let global_vars = List.filter (fun d -> Declaration.kind d = "var")
+  let procs = List.filter (fun d -> Declaration.kind d = "proc")
 
 	let map_fold fn a ds = List.map_fold_left fn a ds
 	let map_fold_procs fn a =
@@ -878,31 +914,25 @@ end = struct
 				let a, p = fn a (n,p) in
 				a, Declaration.Proc (ax,n,p)
 		  	| d -> a, d ) a
-	let map_fold_stmts fn a = 
-		map_fold_procs (fun a (n,p) -> Procedure.map_fold_stmts (fn n) a p) a
+        
+	let map_fold_stmts fn = 
+		map_fold (fun a d -> 
+      match d with
+      | Declaration.Proc (ax,n,p) -> 
+        let a, p = Procedure.map_fold_stmts fn a p 
+        in a, Declaration.Proc (ax,n,p)
+      | d -> a, d )
 		
 	let map fn = map_fold_to_map map_fold fn
 	let fold fn a = map_fold_to_fold map_fold fn a
 	(* let map_procs fn = map_fold_to_map map_fold_procs fn *)
 	(* let map_stmts fn = map_fold_to_map map_fold_stmts fn *)
-
-	let map_procs fn = snd << map_fold_procs (fun _ (_,p) -> (), fn p) ()
-	let map_stmts : (Identifier.t -> Ls.t -> Ls.t list) -> t -> t = fun fn ->
-		snd << map_fold_stmts (fun n _ s -> (), fn n s) ()
-	
-	let fold_stmts fn a = fst << map_fold_stmts (fun _ a s -> fn a s, [s]) a
-
-	let map_exprs fn = 
-		List.map (
-			function Declaration.Axiom (ax,e) -> Declaration.Axiom (ax, Expression.map (fn "") e)
-			| Declaration.Func (ax,f,tx,ps,r,e) -> 
-				Declaration.Func (ax,f,tx,ps,r, Option.map (Expression.map (fn "")) e)
-			| Declaration.Var (ax,n,t,e) -> 
-				Declaration.Var (ax,n,t,Option.map (Expression.map (fn n)) e)
-			| Declaration.Proc (ax,n,p) -> Declaration.Proc (ax,n,Procedure.map_exprs (fn n) p)
-			| Declaration.Impl (ax,n,p) -> Declaration.Impl (ax,n,Procedure.map_exprs (fn n) p)
-			| d -> d
-		) 
+  (* let fold_stmts fn = map_fold_to_fold map_fold_stmts fn *)
+  
+	let map_procs fn = snd << map_fold_procs (fun _ (_,p) -> (), fn p) ()  	
+  let fold_stmts fn a = fst << map_fold_stmts (fun a s -> fn a s, [s]) a
+	let map_stmts : (Ls.t -> Ls.t list) -> t -> t = 
+    fun fn ->	snd << map_fold_stmts (fun _ s -> (), fn s) ()
 
 	let fold_procs fn =
 		List.fold_left
@@ -910,48 +940,13 @@ end = struct
 				 match d with
 				 | Declaration.Proc (ax,n,p) -> fn a p
 				 | _ -> a)
-			
-	let find p n = List.first ((=) n << Declaration.name) p
-	let find_proc p n =
-		Option.seq (function Declaration.Proc (_,_,p) -> Some p | _ -> None)
-		<| List.first ((=) n << Declaration.name 
-			&&&& (function Declaration.Proc _ -> true | _ -> false)) p
-
-	let translate
-		?(replace_global_decls = List.unit)
-		?(new_global_decls = [])
-		?(new_proc_params = const [])
-		?(new_proc_rets = const [])
-		?(new_local_decls = const [])
-		?(proc_body_prefix = const [])
-		?(proc_body_suffix = const [])
-		?(per_stmt_map = const List.unit)
-		?(per_expr_map = const id) =
-		
-		List.append new_global_decls
-		<< List.flatten << map (
-			function Declaration.Proc (ax,n,((ts,ps,rs,es,ds,ss) as p)) ->
-				let ps' = ps @ new_proc_params (ax,n,p)
-				and rs' = rs @ new_proc_rets (ax,n,p)
-				and ds' = ds @ new_local_decls (ax,n,p) in
-        
-        (* Add the suffix just before each return statement.
-          Note: we assume each procedure ends with a return. *)
-        let ss' = 
-          List.append (proc_body_prefix (ax,n,p))
-          << snd << Ls.map_fold_stmts
-            ( fun () s -> 
-              match s with
-              | ls, Statement.Return -> (), proc_body_suffix (ax,n,p) @ [s]
-              | _ -> (), [s] )
-            () <| ss 
-            
-				in Declaration.Proc (ax,n,(ts,ps',rs',es,ds',ss')) :: []
-			| d -> d :: [] )
-		<< List.flatten << map replace_global_decls
-		<< map_stmts (per_stmt_map)
-		<< map_exprs (per_expr_map)	
-
+				 (*       
+				   let find p n = List.first ((=) n << Declaration.name) p
+				   let find_proc p n =
+				     Option.seq (function Declaration.Proc (_,_,p) -> Some p | _ -> None)
+				     <| List.first ((=) n << Declaration.name 
+				       &&&& (function Declaration.Proc _ -> true | _ -> false)) p *)
+				 
 	open PrettyPrinting
 	let print p = (vcat << List.map Declaration.print <| p) $+$ empty
 	let to_string = render << print

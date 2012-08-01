@@ -34,7 +34,7 @@ let parse_program src =
 		BP (ParsingUtils.parse_file BpParser.program_top BpLexer.token src)
 
 	else if Filename.check_suffix src ".bpl" then
-		BPL ( BplUtils.Program.post_parsing
+		BPL ( BplUtils.Extensions.Program.post_parsing
           << ParsingUtils.parse_file BplParser.program_top BplLexer.token 
           <| src )
 		
@@ -64,7 +64,8 @@ let _ =
 
 			(* Back-end necessitites *)
 			| BP p, ("prepare-for-back-end",_) -> BP (BpUtils.prepare_for_back_end p)
-			| BPL p, ("prepare-for-back-end",_) -> BPL (BplUtils.Program.pre_boogie p)
+			| BPL p, ("prepare-for-back-end",_) -> 
+        BPL (BplUtils.Extensions.Program.pre_boogie p)
 			
       | BPL p, ("seq-framework",_) -> BPL (BplSeqFramework.seq_framework p)
 			| BPL p, ("esc-async",_) -> BPL (BplEscAsync.async_to_seq p)	

@@ -3,6 +3,7 @@ open PrettyPrinting
 open Printf
 open BplAst
 open BplUtils.Operators
+open BplUtils.Extensions
 open BplUtils.Abbreviations
 
 module Tr = BplSeqFramework
@@ -72,9 +73,10 @@ let multi_to_single p =
 	in 
 					
   Program.translate
+    ~ignore_attrs: ["leavealone"]
     ~new_global_decls: (
       [ D.type_ "pid" ]
-      @ List.map ( fun p -> D.uniq_const p pid_t ) used_pids
+      @ List.map ( fun p -> D.const ~unique:true p pid_t ) used_pids
       @ [ D.axiom << E.forall ["p",pid_t] << E.disj 
           << List.map (fun pid -> "p" $=$ pid) 
           <| used_pids ]
@@ -92,15 +94,8 @@ let multi_to_single p =
 
   		  | _ -> [d] )
 			
-		~new_proc_params: 
-			(fun (ax,n,_) ->
-				if A.has "leavealone" ax then []
-        else if List.mem n [] then []
-				else [pid_var, pid_t] )
-          
-    ~per_expr_map:
-      (fun n -> vectorize_expr)
-        
-    ~per_stmt_map: (fun n -> call)
+		~new_proc_params: (const [pid_var, pid_t])
+    ~per_expr_map: (const vectorize_expr)
+    ~per_stmt_map: (const call)
         
     p

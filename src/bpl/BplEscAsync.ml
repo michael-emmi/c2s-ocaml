@@ -2,6 +2,7 @@ open Prelude
 open PrettyPrinting
 open Printf
 open BplAst
+open BplUtils.Extensions
 open BplUtils.Abbreviations
 
 let async_to_seq p =

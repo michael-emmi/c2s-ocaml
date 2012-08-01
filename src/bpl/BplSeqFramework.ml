@@ -3,6 +3,7 @@ open PrettyPrinting
 open Printf
 open BplAst
 open BplUtils.Operators
+open BplUtils.Extensions
 open BplUtils.Abbreviations
 
 let main_proc = "main"
@@ -48,9 +49,9 @@ let seq_framework  =
           
         top_proc_name, ([],[],[],[],[],(
           (E.ident err_flag |:=| E.bool false)
-          @ [ Ls.annotate [A.unit "initial"] ]
-          @ [ Ls.call main_proc_name [] [] ]
-          @ [ Ls.annotate [A.unit "validity"] ]
+          @ [ Ls.skip ~attrs:[A.unit "initial"] () ]
+          @ [ Ls.call main_proc_name ]
+          @ [ Ls.skip ~attrs:[A.unit "validity"] () ]
 
           @ [ if boogie_si_mode 
               (* Boogie's /stratifiedInline mode checks whether an entrypoint
@@ -58,7 +59,7 @@ let seq_framework  =
               then Ls.assume (E.ident err_flag) 
               else Ls.assert_ (!| (E.ident err_flag)) ]
 
-          @ [ Ls.return ]
+          @ [ Ls.return () ]
         ))
       )
     ]
@@ -66,10 +67,6 @@ let seq_framework  =
     ~per_stmt_map: (fun n s -> 
       match s with
       | ls, S.Assert ([],e) ->
-        Ls.add_labels ls (
-          E.ident err_flag |:=| (
-            E.ident err_flag ||| (E.negate e)
-          )
-        )
-      | _ -> [s]
+        Ls.add_labels ls (E.ident err_flag |:=| (E.ident err_flag ||| (E.negate e)))
+      | _ -> [s] 
     )

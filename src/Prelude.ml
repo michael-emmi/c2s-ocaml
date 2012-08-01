@@ -335,6 +335,9 @@ module Option = struct
 	  match o with
 	  | Some x -> f x
 	  | _ -> a
+    
+  let bool o = reduce id false o
+  let list o = reduce id [] o
 
   let to_string fn =
 	  reduce (Printf.sprintf "Some (%s)" << fn) "None"

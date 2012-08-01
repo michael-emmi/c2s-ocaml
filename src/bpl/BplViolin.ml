@@ -3,6 +3,7 @@ open PrettyPrinting
 open Printf
 open BplAst
 open BplUtils
+open BplUtils.Extensions
 open BplUtils.Abbreviations
 
 let instrument k p =
@@ -36,15 +37,14 @@ let instrument k p =
 				( String.concat ", " <| List.map (sprintf "%s.done") methods )
 		)
 		
-		~new_proc_params: (fun (_,n,p) -> 
-			if n == "Main" then
-				[]
+		~new_proc_params: (fun d -> 
+			if D.name d = "Main" then	[]
 			else ["t0", T.Int]
 		)
 			
-		~per_stmt_map: (fun n -> (
-			function (ls, S.Return) when List.mem n methods ->
-				Ls.parse <| sprintf "goto Violin.End.%s;" n
+		~per_stmt_map: (fun d -> (
+			function (ls, S.Return) when List.mem (D.name d) methods ->
+				Ls.parse <| sprintf "goto Violin.End.%s;" (D.name d)
 				
 			| (ls, S.Call (ax,p,es,r)) 
 			  when A.has "async" ax 
@@ -65,8 +65,8 @@ let instrument k p =
 			| ls -> [ls]
 		))
 		
-		~proc_body_prefix: (fun (_,n,_) ->
-			if n = "Main" then
+		~proc_body_prefix: (fun d ->
+			if D.name d = "Main" then
 				Ls.parse <| sprintf (
 					"time := 0;
 					 ret := false;
@@ -83,7 +83,8 @@ let instrument k p =
 			else []
 		)
 			
-		~proc_body_suffix: (fun (_,n,_) -> 
+		~proc_body_suffix: (fun d -> 
+      let n = D.name d in
 			if List.mem n methods then
 				Ls.parse <| sprintf (
 					"Violin.End.%s: \
