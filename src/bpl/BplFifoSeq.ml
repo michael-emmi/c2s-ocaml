@@ -57,6 +57,8 @@ let assumptions pgm =
 let phase_bounding_simple phase_bound delay_bound p =
   
   assumptions p;
+  
+  let delay_label_idx = ref 0 in
 
   let phase_var = sprintf "%s.phase" stage_id
   and phase_const = sprintf "%s.PHASE_BOUND" stage_id
@@ -106,8 +108,8 @@ let phase_bounding_simple phase_bound delay_bound p =
         then begin
           Ls.assume (shift_var $=$ init_shift_var) 
           :: Ls.assume 
-              (E.forall ["p",T.t "pid"; "ph",T.Int] 
-                (shift_expr (E.ident "p") (E.ident "ph") |=| E.num 0))
+              (E.forall ["p",T.t "pid"] 
+                (shift_expr (E.ident "p") (E.num 0) |=| E.num 0))
           :: ( E.ident delay_var |:=| E.num 0 ) 
         end
         else [] )
@@ -169,7 +171,9 @@ let phase_bounding_simple phase_bound delay_bound p =
   and delay s =
     match s with
     | ls, s when Ls.is_yield (ls,s) && delay_bound > 0 -> 
-      let ss = proc_end_stmts
+      let ss = 
+        ( Ls.add_labels [sprintf "DELAY.%n" (incr delay_label_idx; !delay_label_idx)]
+          proc_end_stmts )
         @ [ Ls.assume (E.ident delay_var |<| E.ident delay_const) ;
             Ls.incr (E.ident delay_var) ;
             Ls.incr (shift_expr (E.ident "self") (E.ident phase_var)) ]
