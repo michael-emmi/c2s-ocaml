@@ -91,7 +91,7 @@ doc: $(CMOFILES)
 	@mkdir -p $(DOCDIR)
 	@ocamlfind ocamldoc -html -sort -d $(DOCDIR) \
 		-I $(OBJDIR) -I $(INCDIR) \
-		$$(find $(SRC) $(OBJDIR) -name "*.ml" -or -name "*.mli")
+		$(foreach ml,$(CAML_LIB_OBJ),$(shell find $(SRC) -name $(ml).ml))
 
 clean: default-clean
 distclean: clean

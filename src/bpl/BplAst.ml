@@ -727,6 +727,15 @@ and Declaration : sig
 	val const : ?attrs:Attribute.t list -> ?unique:bool -> 
     Identifier.t -> Type.t -> t    
 	val axiom : ?attrs:Attribute.t list -> Expression.t -> t
+  
+  val proc : ?attrs:Attribute.t list -> 
+    ?type_args:(Identifier.t list) ->
+    ?params:((Identifier.t * Type.t) list) ->
+    ?returns:((Identifier.t * Type.t) list) ->
+    ?spec:(Specification.t list) ->
+    ?decls:(Declaration.t list) ->
+    ?body:(LabeledStatement.t list) ->
+    Identifier.t -> t
 
   val attrs : t -> Attribute.t list
 	val name : t -> Identifier.t
@@ -768,17 +777,23 @@ end = struct
   let type_ ?attrs:ax ?ctor_args:cs t = TypeCtor (Option.list ax, false, t, Option.list cs)
   let var ?attrs:ax ?where_clause:wc s t = Var (Option.list ax,s,t,wc)
 	let const ?attrs:ax ?unique:u s t = Const (Option.list ax, Option.bool u, s, t, ())
-	let axiom ?attrs:ax e = Axiom (Option.list ax, e)
-  
+	let axiom ?attrs:ax e = Axiom (Option.list ax, e)  
+  let proc ?attrs:ax ?type_args:tx ?params:ps ?returns:rs ?spec:es ?decls:ds 
+    ?body:ss n =
+    Proc ( Option.list ax, n, (
+      Option.list tx, Option.list ps, Option.list rs,
+      Option.list es, Option.list ds, Option.list ss
+    ))
+
   let attrs = function
 		| TypeCtor (ax,_,_,_) | TypeSyn (ax,_,_,_) | Const (ax,_,_,_,_)
     | Func (ax,_,_,_,_,_)	| Var (ax,_,_,_) | Proc (ax,_,_) | Impl (ax,_,_) 
     | Axiom (ax,_) -> ax
 
 	let name = function
-		| TypeCtor _ -> "type"
-		| TypeSyn _ -> "type"
 		| Axiom _ -> "*axiom*"
+		| TypeCtor (_,_,n,_)
+		| TypeSyn (_,n,_,_)
 		| Const (_,_,n,_,_)
 		| Func (_,n,_,_,_,_) 
 		| Var (_,n,_,_)
@@ -799,10 +814,10 @@ end = struct
 		| TypeCtor _ | TypeSyn _ -> "type"
 		| Axiom _ -> "axiom"
 		| Const _ -> "const"
-		| Func _ -> "func"
+		| Func _ -> "function"
 		| Var _ -> "var"
-		| Proc _ -> "proc"
-		| Impl _ -> "impl"
+		| Proc _ -> "procedure"
+		| Impl _ -> "implementation"
 		
 	let to_const = function
 		| Var (ax,n,t,e) ->

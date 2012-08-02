@@ -63,6 +63,8 @@ comp = "#{name}.comp.bpl"
 
 seq = "#{name}.#{phases}-phase.bpl"
 
+puts " #{"-"*78} "
+
 puts "Sequentializing #{name} with #{phases}-phase translation."
 puts "-- Phases: #{phases}"
 puts "-- Delays: #{delays}"
@@ -76,20 +78,24 @@ cmd = [
   "--print #{seq}"
 ]
 
+t0 = Time.now
 output = `#{cmd * " "}`
-  
 if not $?.success? then
   puts "Sequentialization failed:"
   puts "#{cmd * " "}"
   puts output
   exit
+else
+  # puts output
+  puts "Finished in #{Time.now - t0}s"
 end
+
+puts " #{"-" * 78} "
 
 puts "Verifying #{seq} with Boogie..."
 puts "-- StratifiedInline"
 puts "-- ExtractLoops"
 puts "-- and: #{rest.empty? ? "--" : rest }"
-t0 = Time.now
 
 cmd = [ 
   boogie, seq, 
@@ -102,8 +108,8 @@ cmd = [
 # /errorLimit:1 -- only one error (per procedure)
 # /errorTrace:2 -- include all trace labels in error output
 
+t0 = Time.now
 output = `#{cmd * " "}`
-
 if not $?.success? then
   puts "Verification failed:"
   puts "#{cmd * " "}"
@@ -111,9 +117,10 @@ if not $?.success? then
   exit
 else
   puts output
+  puts "Finished in #{Time.now - t0}s."
 end 
 
-puts "Finished in #{Time.now - t0}s."
+puts " #{"-" * 78} "
 
 # if cleanup then
 #     File.delete( "#{src}.async.bpl" )

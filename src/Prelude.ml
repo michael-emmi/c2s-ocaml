@@ -178,8 +178,7 @@ module List = struct
 		  match xs with
 		  | [] -> false
 		  | x::xs -> f i x || exi f (i+1) xs
-	  in exi f 0
-		  
+	  in exi f 0		  
 
   let map_hd f = function
 	  | x::xs -> (f x)::xs

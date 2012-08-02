@@ -71,16 +71,17 @@ let delay_bounding rounds delays pgm =
 		
 	
 	let new_decls = [
-		D.Const ([], false, rounds_const, T.Int, ()) ;
-		D.Axiom ([], E.ident rounds_const |=| E.num rounds) ;
-		D.Const ([], false, delays_const, T.Int, ()) ;
-		D.Axiom ([], E.ident delays_const |=| E.num delays) ;
-		D.Var ([], delays_var, T.Int, None) ;
-		D.Var ([], err_flag, T.Bool, None) ;
-		D.Proc ([A.unit "entrypoint"], top_proc, (
-			[],[],[],[],
-			guess_decls,
-			(
+    D.const rounds_const T.Int ;
+    D.axiom (E.ident rounds_const |=| E.num rounds) ;
+    D.const delays_const T.Int ;
+    D.axiom (E.ident delays_const |=| E.num delays) ;
+    D.var delays_var T.Int ;
+    D.var err_flag T.Bool ;    
+    D.proc
+      ~attrs:[A.unit "entrypoint"]
+      top_proc
+      ~decls: guess_decls
+      ~body: (
 				(E.ident delays_var |:=| E.num 0)
 				@ (E.ident err_flag |:=| E.bool false)
 				@ [ Ls.assume (gs $==$ init_gs) ]
@@ -100,16 +101,7 @@ let delay_bounding rounds delays pgm =
 				@ [ Ls.assume (E.ident err_flag) ;
 					Ls.return () ]
 			) 
-			))
-		]
-			
-	in
-	
-	
-	let is_async_call = function
-	| (_, S.Call (ax,_,_,_)) when A.has "async" ax -> true
-	| _ -> false
-	in
+  ] in
 	
 	let translate_yield s =
 		if Ls.is_yield s then
@@ -124,7 +116,6 @@ let delay_bounding rounds delays pgm =
 
 	and translate_call s =
 		match s with
-		| ls, S.Call (ax,_,_,_) when A.has "leavealone" ax -> [s]
 		| ls, S.Call (ax,n,ps,rs) ->
 			(* ToDo: return assignments for round_idx *)
 			[ ls, S.Call (ax,n,ps@[E.ident round_idx],rs) ]
@@ -132,7 +123,6 @@ let delay_bounding rounds delays pgm =
 
 	and translate_post s =
 		match s with
-		| ls, S.Call (ax,_,_,_) when A.has "leavealone" ax -> [s]
 		| ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
 			if rs <> [] then
 				warn <| 
@@ -159,13 +149,12 @@ let delay_bounding rounds delays pgm =
 		match s with
 		| ls, S.Assert (_,e) -> 
 			Ls.add_labels ls 
-			<< List.singleton
+			<< List.unit
 			<< Ls.ifthenelse ~expr:(E.ident round_idx |<| E.ident rounds_const)
 			<| (E.ident err_flag |:=| ( E.ident err_flag ||| !| e ))
 		| _ -> [s]
 	
-	in
-	
+	in	
 	
 	(if List.length gs = 0 then
 		Program.translate
@@ -180,28 +169,30 @@ let delay_bounding rounds delays pgm =
 		<< id
 	else
 		id
-		
+    
+    << Program.add_inline_attribute
+      ~ignore_attrs: ["leavealone"; "entrypoint"]
+      
+    (* Sequentalization step: translate asynchronous calls to 
+       synchronous calls. 
+       ToDo: separate the Seq-framework part. *)
 		<< Program.translate
       ~ignore_attrs: ["leavealone"]
-			~new_global_decls: ( init_decls @ next_decls @ new_decls )
-			~per_stmt_map: (const (translate_post <=< translate_assert))
-			
-			~new_proc_params: (const [init_round_idx, T.Int])
-								
+			~new_global_decls: ( init_decls @ next_decls @ new_decls )		
+			~new_proc_params: (const [init_round_idx, T.Int])								
+			~per_stmt_map: (const (translate_post <=< translate_assert))	
+      
+    (* Add extra declarations for procedures which make async calls. *)
+    << Program.translate
 			~new_local_decls: 
-				(fun d -> 
-					match Program.find_proc pgm (D.name d) with
-					| Some p when Ls.contains_rec is_async_call (Procedure.stmts p) ->
-						save_decls @ guess_decls
-					| _ -> [] )
-					
-			~replace_global_decls: 
-				( function D.Proc (ax,n,p) as d -> 
-					if A.has "leavealone" ax then [d]
-					else [ D.Proc (A.add (A.num "inline" 1) ax, n, p) ]
-				  | d -> d :: [] )
+        ( function
+          | _, _, p when Ls.contains_rec Ls.is_async (Procedure.stmts p) ->
+            save_decls @ guess_decls
+          | _ -> [] )
 
+    (* Yield elimination / vectorization step. *)
 		<< Program.translate
+      ~ignore_attrs: ["leavealone"]
 			~replace_global_decls: (fun d -> vectorize_var_decl d :: [])
 			~new_local_decls: (const [D.var round_idx T.Int])
 			~proc_body_prefix: (const (round_idx $:=$ init_round_idx))

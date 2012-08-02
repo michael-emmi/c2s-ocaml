@@ -48,21 +48,23 @@ module Statement = struct
 	include Statement
 	module A = Attribute
   
+  let attrs =
+    function
+    | Assume (ax,_) | Assert (ax,_) | Call (ax,_,_,_) -> ax
+    | _ -> []
+  let has_attr a  = List.mem_assoc a << attrs
+  
 	let skip ax = Assume ([A.unit "skip"]@ax, Expression.bool true)
   let yield ax = Assume ([A.unit "yield"]@ax, Expression.bool true)
 	let async ax n ps = Call ([A.unit "async"]@ax,n,ps,[])
-	  
-  let is_skip = function Assume (ax,_) when A.has "skip" ax -> true | _ -> false
-  let is_yield = function Assume (ax,_) when A.has "yield" ax -> true | _ -> false
-  let is_short_yield = 
-    function Assume (ax,_) when A.has "yield" ax -> begin
-      match A.get "yield" ax with
-      | [Left e] when e = Expression.num 1 -> true
-      | _ -> false
-    end
+  
+  let is_skip = has_attr "skip"
+  let is_yield = has_attr "yield"
+  let is_short_yield s = 
+    match A.get "yield" (attrs s) with
+    | [Left e] when e = Expression.num 1 -> true
     | _ -> false
-	let is_async = function Call (ax,_,_,_) when A.has "async" ax -> true	| _ -> false    
-
+	let is_async = has_attr "async"
 end
 
 module rec LabeledStatementExt : sig
@@ -71,7 +73,7 @@ module rec LabeledStatementExt : sig
   val attrs : t -> Attribute.t list
   val has_attr : Identifier.t -> t -> bool
   
-  val incr : Expression.t -> t
+  val incr : ?labels:Identifier.t list -> Expression.t -> t
   
   val skip : ?labels:Identifier.t list -> ?attrs:Attribute.t list -> unit -> t
   val yield : ?labels:Identifier.t list -> ?attrs:Attribute.t list -> unit -> t
@@ -90,16 +92,20 @@ module rec LabeledStatementExt : sig
   val incomplete_calls : Program.t -> t list -> Type.t list list
   val complete_returns : Program.t -> t -> t list
   
-  val parse : string -> t list
+  val parse : ?labels:Identifier.t list -> string -> t list
   
 end = struct
 	include LabeledStatement
   module A = Attribute
 	module S = Statement
-	
-	let parse = ParsingUtils.parse_string
-		BplParser.labeled_statements_top
-		BplLexer.token
+
+	let rec add_labels ls' = 
+		function [] -> (ls', Statement.skip []) :: []
+		| (ls, s) :: ss -> (ls@ls', s) :: ss
+  	
+	let parse ?labels:ls = 
+    add_labels (Option.list ls)
+    << ParsingUtils.parse_string BplParser.labeled_statements_top	BplLexer.token
 	
   let skip ?labels:ls ?attrs:ax () = Option.list ls, S.skip (Option.list ax)
 	let yield ?labels:ls ?attrs:ax () = Option.list ls, S.yield (Option.list ax)
@@ -113,20 +119,14 @@ end = struct
   let is_short_yield = S.is_short_yield << snd
   let is_async = S.is_async << snd
   
-  let attrs (_,s) =
-    match s with
-    | S.Assume (ax,_) | S.Assert (ax,_) | S.Call (ax,_,_,_) -> ax
-    | _ -> []
-  let has_attr a  = List.mem_assoc a << attrs
+  let attrs = S.attrs << snd
+  let has_attr a = S.has_attr a << snd
   
-	let incr e = 
+	let incr ?labels:ls e = 
 		assign 
+      ~labels:(Option.list ls)
 			[Lvalue.from_expr e] 
 			[Expression.Bin (BinaryOp.Plus, e, Expression.num 1) ] 
-
-	let rec add_labels ls' = 
-		function [] -> (ls', Statement.skip []) :: []
-		| (ls, s) :: ss -> (ls@ls', s) :: ss
 
 	let modifies =
 		fold_stmts
@@ -242,7 +242,7 @@ end = struct
       ( fun ms p -> List.union ms (mods p) )
       ( mods p )
       ss
-    in tx, ps, rs, sx @ (if ms = [] then [] else [Specification.Modifies (false,ms)]), ds, ss
+    in tx, ps, rs, sx @ (match ms with [] -> [] | _ -> [Specification.Modifies (false,ms)]), ds, ss
 
   (* Declarations for variables introduced because of 
      return-assignment completion. *)
@@ -268,25 +268,28 @@ end
 and ProgramExt : sig
   include module type of Program with type t = Program.t
   
+  type proc_ctx = Attribute.t list * Identifier.t * Procedure.t
+  val exists : (Declaration.t -> bool) -> t -> bool
+  val forall : (Declaration.t -> bool) -> t -> bool
   val fold_over_calls : t -> ('a -> Procedure.t -> 'a) -> 'a -> LabeledStatement.t list -> 'a
   val exists_stmt : (LabeledStatement.t -> bool) -> t -> bool
-
   val find : t -> Identifier.t -> Declaration.t option
-  val find_proc : t -> Identifier.t -> Procedure.t option
-  
+  val find_proc : t -> Identifier.t -> Procedure.t option  
   val map_exprs : (Declaration.t -> Expression.t -> Expression.t) -> t -> t
   val map_stmts : (Declaration.t -> LabeledStatement.t -> LabeledStatement.t list) -> t -> t
+  
+  val add_inline_attribute : ?ignore_attrs: string list -> t -> t
   
   val translate : 
     ?ignore_attrs: string list ->
     ?replace_global_decls: (Declaration.t -> Declaration.t list) ->
     ?new_global_decls: Declaration.t list ->
-    ?new_proc_params: (Declaration.t -> (Identifier.t * Type.t) list) ->
-    ?new_proc_rets: (Declaration.t -> (Identifier.t * Type.t) list) ->
-    ?new_local_decls: (Declaration.t -> Declaration.t list) ->
-    ?proc_body_prefix: (Declaration.t -> LabeledStatement.t list) ->
-    ?proc_body_suffix: (Declaration.t -> LabeledStatement.t list) ->
-    ?per_stmt_map: (Declaration.t -> LabeledStatement.t -> LabeledStatement.t list) ->
+    ?new_proc_params: (proc_ctx -> (Identifier.t * Type.t) list) ->
+    ?new_proc_rets: (proc_ctx -> (Identifier.t * Type.t) list) ->
+    ?new_local_decls: (proc_ctx -> Declaration.t list) ->
+    ?proc_body_prefix: (proc_ctx -> LabeledStatement.t list) ->
+    ?proc_body_suffix: (proc_ctx -> LabeledStatement.t list) ->
+    ?per_stmt_map: (proc_ctx -> LabeledStatement.t -> LabeledStatement.t list) ->
     ?per_expr_map: (Declaration.t -> Expression.t -> Expression.t) ->
     t -> t
   
@@ -299,7 +302,12 @@ end = struct
   module A = Attribute
   module D = Declaration
   module Ls = LabeledStatementExt
-			
+  
+  type proc_ctx = Attribute.t list * Identifier.t * Procedure.t
+  
+  let exists fn = List.exists fn
+  let forall fn = List.for_all fn
+  			
 	let find p n = List.first ((=) n << Declaration.name) p
   
 	let find_proc p n =
@@ -362,20 +370,20 @@ end = struct
 		
 		List.append new_global_decls
 		<< List.flatten << map (
-			function (Declaration.Proc (ax,n,((ts,ps,rs,es,ds,ss))) as d) 
+			function Declaration.Proc (ax,n,((ts,ps,rs,es,ds,ss) as p))
       when not (ignore ax) ->
-				let ps' = ps @ new_proc_params d
-				and rs' = rs @ new_proc_rets d
-				and ds' = ds @ new_local_decls d in
+				let ps' = ps @ new_proc_params (ax,n,p)
+				and rs' = rs @ new_proc_rets (ax,n,p)
+				and ds' = ds @ new_local_decls (ax,n,p) in
         
         (* Add the suffix just before each return statement.
           Note: we assume each procedure ends with a return. *)
         let ss' = 
-          List.append (proc_body_prefix d)
+          List.append (proc_body_prefix (ax,n,p))
           << snd << LabeledStatement.map_fold_stmts
             ( fun () s -> 
               match s with
-              | ls, Statement.Return -> (), proc_body_suffix d @ [s]
+              | ls, Statement.Return -> (), proc_body_suffix (ax,n,p) @ [s]
               | _ -> (), [s] )
             () <| ss 
             
@@ -392,7 +400,7 @@ end = struct
       if ignore (D.attrs d) then d else match d with
       | D.Proc (ax,n,p) -> 
         let _, p = Procedure.map_fold_stmts 
-          (fun _ s -> (), if ignore (Ls.attrs s) then [s] else per_stmt_map d s) 
+          (fun _ s -> (), if ignore (Ls.attrs s) then [s] else per_stmt_map (ax,n,p) s) 
           () p 
         in D.Proc (ax,n,p)
       | d -> d )
@@ -408,6 +416,15 @@ end = struct
 			| D.Proc (ax,n,p) -> D.Proc (ax,n,Procedure.map_exprs (per_expr_map d) p)
 			| D.Impl (ax,n,p) -> D.Impl (ax,n,Procedure.map_exprs (per_expr_map d) p)
     | d -> d )
+    
+  let add_inline_attribute ?ignore_attrs p =
+    translate
+      ~ignore_attrs: (Option.list ignore_attrs)
+			~replace_global_decls:
+				( function 
+          | D.Proc (ax,n,p) -> [ D.Proc (A.add (A.num "inline" 1) ax, n, p) ]
+          | d -> d :: [] )
+      p
     
   let check_for_assertions p =  
     if exists_stmt (function (_, Statement.Assert _) -> true | _ -> false ) p 

@@ -11,12 +11,52 @@ open BplUtils.Abbreviations
 module Tr = BplSeqFramework
 
 let stage_id = "FiFoSeq"
+let use_simple_translation = true
+
+let assumptions pgm =
+  if not (Program.exists (fun d -> D.name d = "pid" && D.kind d = "type") pgm)
+    then failwith "FiFo sequentialization expects `pid' type declaration.";
+
+  if not (Program.forall (
+    function 
+    | D.Proc (ax,n,(_,ps,_,_,ds,_)) 
+      when not (A.has "entrypoint" ax) 
+      && not (A.has "leavealone" ax)
+      && not (List.mem "self" (List.map fst ps @ List.map D.name ds)) ->
+        warn (sprintf "Procedure %s does not have `self' variable." n);
+        false
+    | _ -> true) pgm)
+    then failwith 
+      ( "FiFo sequentialization expects each non-entrypoint procedure " ^
+        "defines a `self' variable." );
+  
+  if not (Program.forall (
+    function
+    | D.Proc (ax,n,p) ->
+      List.for_all 
+        ( fun x -> match Program.find pgm x with
+          | Some (D.Var (_,_,T.Map(_,ts,_),_)) when List.mem (T.t "pid") ts -> true
+          | Some (D.Var (ax,_,_,_)) when A.has "leavealone" ax -> true
+          | Some (D.Var _ ) ->
+            warn (sprintf "Procedure `%s' modifies non-pid-partitioned state `%s'." n x);
+            false
+          | _ -> true )
+        (Procedure.mods p)
+    | _ -> true ) pgm)
+    then failwith
+      ( "FiFo sequentialization expects procedures only modify global variables " ^
+        "partitioned by process identifiers (pid)." );
+        
+  (* ToDo: ensure processors do not access others' partition. *)  
+  
+  ()
 
 (** An encoding of the breadth-first task-scheduling order, which preserves
- * the ordered "FiFo" task-buffer semantics, though only executes tasks up
- * a given level [k] of the task-creation tree. *)
-let phase_bounding_simple phases delays p =
-  let k = phases - 1 in
+ * the ordered FiFo task-buffer semantics, though only executes tasks up
+ * a given level k of the task-creation tree. *)
+let phase_bounding_simple phase_bound delay_bound p =
+  
+  assumptions p;
 
   let phase_var = sprintf "%s.phase" stage_id
   and phase_const = sprintf "%s.PHASE_BOUND" stage_id
@@ -45,7 +85,7 @@ let phase_bounding_simple phases delays p =
   
   let proc_begin_stmts = 
     ( E.ident vphase_var 
-      |:=| ( if delays > 0 
+      |:=| ( if delay_bound > 0 
              then E.ident phase_var |+| shift_expr (E.ident "self") (E.ident phase_var) 
              else E.ident phase_var ))
     @ ( List.flatten
@@ -62,7 +102,7 @@ let phase_bounding_simple phases delays p =
     List.map (fun g -> Ls.assume (repl_var g $=$ init_var g)) gvars
     
     (* Special case for delays. *)
-    @ ( if delays > 0 
+    @ ( if delay_bound > 0 
         then begin
           Ls.assume (shift_var $=$ init_shift_var) 
           :: Ls.assume 
@@ -78,16 +118,16 @@ let phase_bounding_simple phases delays p =
         List.map Ls.assume
      		<< List.map (fun g -> repl g (E.num (i-1)) |=| init g (E.num i))
      		<| gvars )
-      <| List.range 1 (phases+delays-1) )
+      <| List.range 1 (phase_bound+delay_bound-1) )
       
     (* Special case for delays. *)
-    @ ( if delays > 0 
+    @ ( if delay_bound > 0 
         then List.map (fun i -> 
           Ls.assume ( 
             E.forall ["p",T.t "pid"]
               ( shift_expr (E.ident "p") (E.num (i-1)) 
                 |=| init_shift_expr (E.ident "p") (E.num i) ))) 
-          (List.range 1 (phases-1))
+          (List.range 1 (phase_bound-1))
         else [] )
   in
 
@@ -112,7 +152,7 @@ let phase_bounding_simple phases delays p =
 
       (* Asynchronous calls. *)
       Ls.ifthenelse ~labels:ls
-        ~expr:(E.ident vphase_var |<| E.ident phase_const)
+        ~expr:( (E.ident vphase_var |+| E.num 1) |<| E.ident phase_const)
         [ Ls.call ~attrs:(A.strip "async" ax) n 
           ~params:(ps@[E.ident vphase_var |+| E.num 1]) ]
       :: []
@@ -128,13 +168,16 @@ let phase_bounding_simple phases delays p =
     
   and delay s =
     match s with
-    | ls, s when Ls.is_yield (ls,s) && delays > 0 -> 
-      Ls.whiledo ~labels: ls (
-        proc_end_stmts
+    | ls, s when Ls.is_yield (ls,s) && delay_bound > 0 -> 
+      let ss = proc_end_stmts
         @ [ Ls.assume (E.ident delay_var |<| E.ident delay_const) ;
             Ls.incr (E.ident delay_var) ;
             Ls.incr (shift_expr (E.ident "self") (E.ident phase_var)) ]
-        @ proc_begin_stmts ) :: []
+        @ proc_begin_stmts in
+      ( if Ls.is_short_yield (ls,s) 
+        then Ls.ifthenelse ~labels:ls ss
+        else Ls.whiledo ~labels:ls ss ) :: []
+
     | _ -> s :: []
     
   and call_main s =
@@ -156,7 +199,7 @@ let phase_bounding_simple phases delays p =
       ~per_stmt_map: (const async_to_sync_call)
     << id
     
-  else if k = 0 then
+  else if phase_bound = 0 then
     
     (* When no phases, just ignore async calls. *)
     Program.translate 
@@ -188,10 +231,11 @@ let phase_bounding_simple phases delays p =
       ~new_global_decls: (
         [ D.const phase_const Type.Int ;
           D.axiom ( E.ident phase_const |>=| E.num 0 ) ;
-          D.axiom ( E.ident phase_const |<| E.num phases ) ;
-        ] @ if delays > 0 then [
+          D.axiom ( E.ident phase_const |<=| E.num phase_bound ) ;
+        ] @ if delay_bound > 0 then [
           D.const delay_const Type.Int ;
-          D.axiom ( E.ident delay_const |=| E.num delays ) ;
+          D.axiom ( E.ident delay_const |>=| E.num 0 ) ;
+          D.axiom ( E.ident delay_const |<=| E.num delay_bound ) ;
           D.var delay_var Type.Int ;
           D.var shift_var (T.map [T.t "pid"] (T.map [T.Int] Type.Int)) ;
           D.var init_shift_var (T.map [T.t "pid"] (T.map [T.Int] Type.Int)) ;
@@ -208,269 +252,10 @@ let phase_bounding_simple phases delays p =
 	<| p
 
 
-(** An encoding of the breadth-first task-scheduling order, which preserves
- * the ordered "FiFo" task-buffer semantics, though only executes tasks up
- * a given level [k] of the task-creation tree. *)
-let phase_bounding_mess phases delay p =
-  let fewer_phases = false in
+let phase_bounding_fewer_phases phase_bound delay_bound p = 
+  failwith "ToDo: implement fewer-phases phase-bounding translation."
 
-  let phase_var = sprintf "__%s__phase" stage_id
-  and next_phase_var = sprintf "__%s__next_phase" stage_id
-  and bound = sprintf "__%s__K" stage_id
-  
-  and shift_var = sprintf "__%s__shift" stage_id
-  and init_shift_var = sprintf "__%s__shift_init" stage_id
-  and delay_var = sprintf "__%s__delay" stage_id
-  and ancestor_var = sprintf "__%s__ancestor" stage_id
-  and anc_stack_var = sprintf "__%s__anc_saved" stage_id
-  
-  and next_shift_var = sprintf "__%s__next_shift" stage_id
-  and next_delay_var = sprintf "__%s__next_delay" stage_id
-
-  and repl_var = fun x-> sprintf "%s__%s__vec" x stage_id
-  and init_var = fun x-> sprintf "%s__%s__vec_init" x stage_id
-  in
-	
-  let shift_expr phase pid = 
-    E.sel (E.sel (E.ident shift_var) [phase]) [pid] in
-	
-  let phase_expr = 
-    if delay > 0 then
-      E.ident phase_var 
-      |+| shift_expr (E.ident phase_var) (E.ident Tr.self_var)
-    else E.ident phase_var
-  in
-	
-  (* let repl g e = E.sel (E.ident <| repl_var g) [e]
-  and init g e = E.sel (E.ident <| init_var g) [e] in *)
-
-(*   let gvars =
-    List.map D.name
-    << List.filter ((=) "var" << D.kind) <| Program.decls p
-  in *)
-	
-  let pid_vec_t t = Type.Map ([], [Tr.pid_type], Type.Int)
-  and rnd_vec_t t = Type.Map ([], [Type.Int], t) in
-
-  let new_global_decls =
-    [ D.const bound Type.Int ; D.axiom ( E.ident bound |=| E.num phases ) ]
-
-    @ ( if delay > 0 then [
-        D.var shift_var (rnd_vec_t << pid_vec_t <| Type.Int);
-        D.var init_shift_var (rnd_vec_t << pid_vec_t <| Type.Int);
-        D.var delay_var Type.Int
-      ] else [] )
-
-    @ ( if fewer_phases then [
-        D.var ancestor_var (pid_vec_t Type.Int)
-      ] else [] )
-
-    @ List.flatten (List.map (
-      function D.Var (_,_,_,Some _) ->
-        failwith "ToDo: handle where clause in FiFoseq translation."
-      | D.Var (ax,g,t,wh) -> [
-        D.Var (ax, repl_var g, rnd_vec_t t, wh) ;
-        D.Const (ax, false, init_var g, rnd_vec_t t, ()) ]
-      | _ -> [] ) <| Program.decls p)
-  in
-
-  (* let init_predicate = 
-    ( Expression.conj
-    << ( if delay > 0 then (@) [
-      E.forall ["ph", T.Int; "pi", Tr.pid_type] 
-        (shift_expr (E.ident "ph") (E.ident "pi") 
-        |=| E.num 0) 
-      ] else id ) 
-    << List.make
-      (fun i ->
-        Expression.conj
-        ( List.map 
-          (fun g -> repl g (E.num i) |=| init g (E.num i))
-          gvars
-        @ ( if delay > 0 then [
-            E.sel (E.ident shift_var) [E.num i] 
-              |=| E.sel (E.ident init_shift_var) [E.num i]
-          ] else [] ) ) )
-    <| phases+delay )
-
-  and validity_predicate = 
-    Expression.conj
-    << List.make
-      (fun i ->
-        Expression.conj
-        ( List.map
-          (fun g -> repl g (E.num i) |=| init g (E.num <| i+1))
-           gvars 
-        @ ( if delay > 0 then [
-            E.sel (E.ident shift_var) [E.num i]
-            |=| E.sel (E.ident init_shift_var) [E.num <| i+1]
-          ] else [] ) ) )
-    <| phases+delay-1 
-  in *)
-
-  (* let post_to_call_no_globals s =
-    match s with
-    | ls, S.Call (ax,_,_,_) when A.has "leavealone" ax -> [s]
-    | ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
-      if rs <> [] then
-        warn (sprintf "Found async call (to `%s') with assignments." n);
-        
-      (ls, S.Call (A.strip "async" ax, n, ps, rs)) :: []
-      
-      (* ToDo: how to encode inter-node posting? *)
-    
-    | ls, s -> (ls, s)::[] *)
-		
-  (* and post_to_skip s =
-    match s with
-    | ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
-      (ls, S.skip) :: []
-    | _ -> [s] *)
-
-	let post_to_call s =
-		match s with
-    | ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
-      
-      (* ToDo: inter-node posting. *)
-      let target_pid = E.ident "TARGET_PID" in
-      
-      Ls.add_labels ls ( 
-        if delay > 0 then
-          Ls.ifthenelse [
-            Ls.havoc [next_delay_var];
-            Ls.havoc [next_shift_var];
-            Ls.assume (
-              (E.ident next_delay_var |>=| E.num 0)
-              |&| (E.ident next_delay_var |>=| E.ident delay_var) 
-              |&| (E.ident next_delay_var |<| E.num delay)
-              |&| (E.ident next_shift_var |>=| E.num 0)
-              |&| (E.ident next_shift_var 
-                |>=| shift_expr (E.ident phase_var) 
-                  (E.ident Tr.self_var))
-              |&| (E.ident next_shift_var |<| E.num delay)
-              |&| (E.ident next_shift_var |<=| E.ident next_delay_var)          
-            );
-          ]
-          :: (delay_var $:=$ next_delay_var)
-          @ ( shift_expr (E.ident phase_var) (E.ident Tr.self_var) 
-            |:=| E.ident next_shift_var )
-        else [] )
-      @ ( E.ident next_phase_var |:=| phase_expr )
-      @ ( if fewer_phases then [
-          Ls.ifthenelse
-            ~expr:(E.ident next_phase_var |<=| E.sel (E.ident ancestor_var) [target_pid])
-            [ Ls.incr (E.ident next_phase_var) ]
-          ] else [ Ls.incr (E.ident next_phase_var) ] )
-
-      @ [ Ls.ifthenelse
-          ~expr:(E.ident next_phase_var |<| E.num phases)
-          (  ( if fewer_phases then (
-              (E.ident anc_stack_var |:=| E.sel (E.ident ancestor_var) [target_pid])
-              @ (E.sel (E.ident ancestor_var) [target_pid] |:=| E.ident next_phase_var)
-            ) else [] )
-            @ [ Ls.stmt (S.Call (A.strip "async" ax, n, ps@[E.ident next_phase_var],rs)) ]
-            @ ( if fewer_phases then 
-                E.sel (E.ident ancestor_var) [target_pid] |:=| E.ident anc_stack_var
-              else [] ) )
-        ] 
-		| _ -> [s]
-		
-	and call s = 
-		match s with
-    (* | ls, S.Call (ax,_,_,_) when A.has "leavealone" ax -> [s]
-    | ls, S.Call (ax,n,ps,rs) when n = Tr.real_main_proc ->
-      [ ls, S.Call (ax,n,ps@[E.num 0],rs) ]
-    | ls, S.Call (ax,n,ps,rs) when not (List.mem n Tr.aux_procs) ->
-      [ ls, S.Call (ax,n,ps@[E.ident phase_var],rs)] *)
-		| _ -> [s]
-		
-  (* and return in_proc s = 
-    match s with
-    | ls, S.Return e
-    when not (List.mem in_proc (Tr.main_proc :: Tr.aux_procs)) ->
-      Ls.add_labels ls [
-        List.map (flip repl <| phase_expr) gvars |:=| List.map E.ident gvars;
-        Ls.stmt (S.Return e)
-      ]
-    | _ -> [s]
-     *)
-  (* and first_gval gs e =
-    match e with
-    | E.Id x when List.mem x gs -> repl x (E.num 0)
-    | _ -> e
-  
-  and last_gval gs e =
-    match e with
-    | E.Id x when List.mem x gs -> repl x (E.num <| k + delay)
-    | _ -> e
-   *)
-	in
-
-  (
-  (* ( if List.length gvars = 0 then
-    Program.translate
-      ~per_stmt_map: (const post_to_call_no_globals)
-    << id
-    
-  else if k = 0 then
-    Program.translate 
-      ~per_stmt_map: (const post_to_skip)
-    << id
-  else *)
-    Program.translate
-      ~new_global_decls: new_global_decls
-      (* ~rem_global_decls: gvars *)
-      (* ~add_proc_params: 
-        (fun (n,_) ->
-          if List.mem n (Tr.main_proc :: Tr.aux_procs) then [] 
-            else [D.Const ([],phase_var,T.Int,None)]) *)
-      (* ~add_local_decls: 
-        (fun (n,_) ->
-          if n = Tr.main_proc then []
-          else if List.mem n Tr.aux_procs then []
-          else begin
-            (if fewer_phases 
-              then [ D.Var ([], anc_stack_var, T.Int) ] 
-              else [])
-            @ (if delay > 0 
-              then [
-                D.Var ([], next_delay_var, T.Int) ;
-                D.Var ([], next_shift_var, T.Int)
-              ] else [])
-            @ [ D.Var ([], next_phase_var, T.Int) ]
-            @ (List.filter ((=) "var" << D.kind) <| Program.decls p)
-          end) *)
-      (* ~proc_body_prefix: 
-        (fun (n,_) -> 
-          if n = Tr.main_proc then []
-          else if n = Tr.init_proc then
-            (Ls.assume init_predicate)
-            :: (if delay > 0 then [
-              [E.ident delay_var] |:=| [E.num 0] ;
-              [shift_expr (E.num 0) (E.ident Tr.root_pid)]
-                |:=| [E.num 0]
-              ] else [])
-            @ ( if fewer_phases 
-              then [ [E.sel (E.ident ancestor_var) [E.ident Tr.root_pid]]
-                |:=| [E.num 0] ] 
-              else [] )
-          else if n = Tr.validate_proc then [ Ls.assume validity_predicate ]
-          else if n = Tr.check_proc then []
-          else [ List.map E.ident gvars |:=| 
-                List.map (flip repl <| phase_expr) gvars ])  *)
-
-      ~per_stmt_map: 
-        (fun d -> 
-          if List.mem (D.name d) Tr.aux_procs then List.unit
-          else (* return n <=< *) call <=< post_to_call)
-      (* ~per_expr_map:
-        (fun n -> 
-          if n = Tr.init_proc then first_gval gvars
-          else if n = Tr.check_proc then last_gval gvars
-          else id) *)
-		<< id )
-	<| p
-
-let phase_bounding phases delays p =
-  if true then phase_bounding_simple phases delays p
-  else phase_bounding_mess phases delays p
+let phase_bounding phase_bound delay_bound p = 
+  if use_simple_translation 
+    then phase_bounding_simple phase_bound delay_bound p
+  else phase_bounding_fewer_phases phase_bound delay_bound p

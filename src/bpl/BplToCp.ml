@@ -99,7 +99,7 @@ let rec stmt s =
 		  (** ToDo -- need name of return variable here. *)
 		  | ls, S.Return -> [ LLs.S (ls, SS.Return ___) ]
 
-		  | ls, S.Assign (xs,es,None)
+		  | ls, S.Assign (xs,es)
 				when List.for_all (function E.Choice -> true | _ -> false) es
 					&& List.for_all (function Lv.Id _ -> true | _ -> false) xs
 					-> [ ls, SS.Havoc (List.map (LLv.name << lval) xs) ]
@@ -163,9 +163,9 @@ let rec stmt s =
 				[ LLs.S (ls, SS.While (decider e, List.map
 									(Tup2.ekam false << expr) es,
 								List.flatten (List.map stmt ss))) ]
-		  | ls, S.Assert e -> [ LLs.S (ls, SS.Assert (expr e)) ]
-		  | ls, S.Assume e -> [ LLs.S (ls, SS.Assume (expr e)) ]
-		  | ls, S.Call (p,es,lvs) ->
+		  | ls, S.Assert (_,e) -> [ LLs.S (ls, SS.Assert (expr e)) ]
+		  | ls, S.Assume (_,e) -> [ LLs.S (ls, SS.Assume (expr e)) ]
+		  | ls, S.Call (_,p,es,lvs) ->
 				[ls, SS.Call ( [], ident p,
 							   List.map expr es,
 							   List.map 
@@ -179,15 +179,11 @@ let rec stmt s =
 
 									lvs )]
 
-		  | _, S.Post _ | _, S.Yield _ | _, S.New _ ->
-				failwith "Cannot express concurrency in Boogie programs."
-
 		  | _, s -> failwith
 				<< sprintf "Illegal statement `%s' for Boogie programs."
 				<| S.to_string s
 
 	  end
-	| Ls.C c -> []
 
 module A = BplAst.Attribute
 module AA = CpAst.Attribute
