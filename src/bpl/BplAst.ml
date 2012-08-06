@@ -628,6 +628,8 @@ module Specification = struct
 end
 
 module rec Procedure : sig
+  (* ToDo: really the parameters should be lists of lists of identifiers
+     with types and where clauses; e.g. x1, x2, .., xk : int where .., *)
 	type t =  Identifier.t list
 			* (Identifier.t * Type.t) list
 			* (Identifier.t * Type.t) list

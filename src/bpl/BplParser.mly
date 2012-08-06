@@ -129,7 +129,7 @@ declaration:
   | AXIOM attributes_opt expression SEMI { D.Axiom ($2,$3) :: [] }
 
   | VAR attributes_opt constrained_typed_identifiers_seq SEMI {
-		List.map (fun (x,t) -> D.Var ($2,x,t,None)) $3
+		List.map (fun (x,t,wh) -> D.Var ($2,x,t,wh)) $3
 	}
   | PROCEDURE attributes_opt identifier
 		  procedure_signature SEMI
@@ -164,7 +164,7 @@ function_signature:
 
 procedure_signature:
 	type_args_opt LPAREN constrained_typed_identifiers_opt RPAREN
-	out_parameters_opt { $1, $3, $5 }
+	out_parameters_opt { $1, List.map (fun (x,t,_) -> x,t) $3, List.map (fun (x,t,_) -> x,t) $5 }
 ;
 
 type_args_opt:
@@ -218,7 +218,7 @@ var_decls:
 
 var_decl:
 	VAR attributes_opt constrained_typed_identifiers_seq SEMI
-	{ List.map (fun (x,t) -> D.Var ($2,x,t,None)) $3 }
+	{ List.map (fun (x,t,wh) -> D.Var ($2,x,t,wh)) $3 }
 ;
 
 /* ToDo: IdsTypeWhere */
@@ -238,8 +238,8 @@ typed_identifiers_seq:
 ;
 	
 constrained_typed_identifiers:
-  | identifiers COLON type_ WHERE expression { List.map (fun x -> (x,$3)) $1 }
-  | identifiers COLON type_ { List.map (fun x -> (x,$3)) $1 }
+  | identifiers COLON type_ WHERE expression { List.map (fun x -> x, $3, Some $5) $1 }
+  | identifiers COLON type_ { List.map (fun x -> x, $3, None) $1 }
 ;
 
 typed_identifiers:

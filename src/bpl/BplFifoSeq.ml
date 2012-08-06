@@ -59,6 +59,8 @@ let phase_bounding_simple phase_bound delay_bound p =
   assumptions p;
   
   let delay_label_idx = ref 0 in
+  
+  let add_debug_info = true in
 
   let phase_var = sprintf "%s.phase" stage_id
   and phase_const = sprintf "%s.PHASE_BOUND" stage_id
@@ -90,6 +92,11 @@ let phase_bounding_simple phase_bound delay_bound p =
       |:=| ( if delay_bound > 0 
              then E.ident phase_var |+| shift_expr (E.ident "self") (E.ident phase_var) 
              else E.ident phase_var ))
+    @ ( if add_debug_info
+        then [ Ls.call "boogie_si_record_int" 
+          ~attrs:[A.unit "leavealone"]
+          ~params:[E.ident vphase_var] ]
+        else [] )
     @ ( List.flatten
         << List.map (fun g -> E.ident g |:=| repl g (E.ident vphase_var))
         <| gvars )
@@ -102,15 +109,24 @@ let phase_bounding_simple phase_bound delay_bound p =
     
   let init_predicate_stmts = 
     List.map (fun g -> Ls.assume (repl_var g $=$ init_var g)) gvars
+    @ ( if add_debug_info then [ 
+          Ls.call "boogie_si_record_int"
+            ~attrs:[A.unit "leavealone"]
+            ~params:[E.ident phase_const]
+        ] else [] )
     
     (* Special case for delays. *)
     @ ( if delay_bound > 0 
-        then begin
-          Ls.assume (shift_var $=$ init_shift_var) 
-          :: Ls.assume 
-              (E.forall ["p",T.t "pid"] 
-                (shift_expr (E.ident "p") (E.num 0) |=| E.num 0))
-          :: ( E.ident delay_var |:=| E.num 0 ) 
+        then begin [
+          Ls.assume (shift_var $=$ init_shift_var) ;
+          Ls.assume (E.forall ["p",T.t "pid"] 
+            (shift_expr (E.ident "p") (E.num 0) |=| E.num 0)) 
+        ] @ ( if add_debug_info then [ 
+                Ls.call "boogie_si_record_int" 
+                  ~attrs:[A.unit "leavealone"] 
+                  ~params:[E.ident delay_const]
+              ] else [] )
+          @ ( E.ident delay_var |:=| E.num 0 ) 
         end
         else [] )
     

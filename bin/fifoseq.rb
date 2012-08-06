@@ -61,7 +61,7 @@ comp = "#{name}.comp.bpl"
 
 `cat #{sources * " "} > #{comp}`
 
-seq = "#{name}.#{phases}-phase.bpl"
+seq = "#{name}.FiFoSeq.#{phases}-phase.bpl"
 
 puts " #{"-"*78} "
 
