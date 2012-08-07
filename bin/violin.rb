@@ -118,8 +118,8 @@ end
 
 def verify( src, args )  
   puts "Verifying #{src} with Boogie..."
-  puts "-- /StratifiedInline:1"
-  puts "-- /ExtractLoops"
+  puts "-- /stratifiedInline:1"
+  puts "-- /extractLoops"
   puts "-- /errorLimit:1"
   puts "-- /errorTrace:2"
   puts "-- and: #{args.empty? ? "--" : args }"

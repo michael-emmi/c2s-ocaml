@@ -153,12 +153,12 @@ end = struct
   let incomplete_calls pgm = 
   	List.map fst
   	<< List.filter (uncurry (<>) << Tup2.map List.length List.length)
-  	<< Option.cat
-   	<< List.map (fun (pn,_,ys) ->
-  					 Option.map ( Tup2.ekam ys
-  								  << snd
-  								  << Procedure.signature )
-  					 <| ProgramExt.find_proc pgm pn )
+    << List.flatten    
+    << List.map 
+      ( fun (n,_,ys) ->         
+        List.map (Tup2.ekam ys << snd << Procedure.signature) 
+        <| ProgramExt.find_proc pgm n
+      )
   	<< calls
 	
   (* Complete the return assignments of a call p(e1,..,ek) into
@@ -168,7 +168,7 @@ end = struct
   	match s with
     | ls, Statement.Call (ax,n,es,xs) -> begin
       match ProgramExt.find_proc pgm n with
-      | Some p -> begin
+      | p::_ -> begin
         let _, ts = Procedure.signature p in
         if List.length xs = List.length ts 
           then [s]
@@ -273,8 +273,8 @@ and ProgramExt : sig
   val forall : (Declaration.t -> bool) -> t -> bool
   val fold_over_calls : t -> ('a -> Procedure.t -> 'a) -> 'a -> LabeledStatement.t list -> 'a
   val exists_stmt : (LabeledStatement.t -> bool) -> t -> bool
-  val find : t -> Identifier.t -> Declaration.t option
-  val find_proc : t -> Identifier.t -> Procedure.t option  
+  val find : t -> Identifier.t -> Declaration.t list
+  val find_proc : t -> Identifier.t -> Procedure.t list
   val map_exprs : (Declaration.t -> Expression.t -> Expression.t) -> t -> t
   val map_stmts : (Declaration.t -> LabeledStatement.t -> LabeledStatement.t list) -> t -> t
   
@@ -308,23 +308,19 @@ end = struct
   let exists fn = List.exists fn
   let forall fn = List.for_all fn
   			
-	let find p n = List.first ((=) n << Declaration.name) p
-  
-	let find_proc p n =
-		Option.seq (function Declaration.Proc (_,_,p) -> Some p | _ -> None)
-		<| List.first ((=) n << Declaration.name 
-			&&&& (function Declaration.Proc _ -> true | _ -> false)) p
+	let find p n = List.filter ((=) n << Declaration.name) p  
+	let find_proc p n = 
+    Option.cat
+    << List.map (function D.Proc (_,_,p) -> Some p | _ -> None)
+    <| find p n
   
   let rec fold_over_calls pgm fn a ss =
     let rec foc st a ss =
       List.fold_left (fun a (n,p) -> 
         fn (foc (n::st) a (Procedure.stmts p)) p) a
-      << Option.cat
-      << List.map (Option.seq 
-        ( function 
-          | Declaration.Proc (_,n,p) when not (List.mem n st) -> Some (n, p) 
-          | _ -> None )
-        << find pgm )
+      << List.filter (fun (n,_) -> not (List.mem n st))
+      << List.flatten
+      << List.map ( fun n -> List.map (Tup2.make n) <| find_proc pgm n )
       <| LabeledStatementExt.called ss
     in foc [] a ss
     

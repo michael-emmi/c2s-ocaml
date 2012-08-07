@@ -35,9 +35,9 @@ let assumptions pgm =
     | D.Proc (ax,n,p) ->
       List.for_all 
         ( fun x -> match Program.find pgm x with
-          | Some (D.Var (_,_,T.Map(_,ts,_),_)) when List.mem (T.t "pid") ts -> true
-          | Some (D.Var (ax,_,_,_)) when A.has "leavealone" ax -> true
-          | Some (D.Var _ ) ->
+          | (D.Var (_,_,T.Map(_,ts,_),_))::_ when List.mem (T.t "pid") ts -> true
+          | (D.Var (ax,_,_,_))::_ when A.has "leavealone" ax -> true
+          | (D.Var _ )::_ ->
             warn (sprintf "Procedure `%s' modifies non-pid-partitioned state `%s'." n x);
             false
           | _ -> true )

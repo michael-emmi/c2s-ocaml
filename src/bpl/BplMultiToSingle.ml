@@ -26,7 +26,7 @@ let multi_to_single p =
   
   let root_node = 
     match Program.find p "Main" with
-    | Some (D.Proc (ax,_,_)) when A.has "node" ax -> begin
+    | (D.Proc (ax,_,_))::_ when A.has "node" ax -> begin
       match A.get "node" ax with
       | [Left e] -> e
       | _ -> failwith (sprintf "Expected expression in :node annotation.")
