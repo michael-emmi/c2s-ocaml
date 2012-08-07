@@ -16,9 +16,8 @@ let stage_id = "A2S"
  * the unordered (i.e., "bag") semantics.*)
 let delay_bounding rounds delays pgm =
 	
-	let main_proc = "Main" in
-	
 	let gs = List.map D.name 
+    << List.filter (not << A.has "leavealone" << D.attrs)
 		<< List.filter ((=) "var" << D.kind) 
 		<| Program.decls pgm in
 	
@@ -38,13 +37,11 @@ let delay_bounding rounds delays pgm =
 	and save = fun x-> sprintf "%s.%s.save" x stage_id
 	and next = fun x-> sprintf "%s.%s.next" x stage_id
 	and init = fun x-> sprintf "%s.%s.0" x stage_id
-	and err_flag = sprintf "%s.err" stage_id
 	and rounds_const = sprintf "%s.ROUNDS" stage_id
 	and delays_const = sprintf "%s.DELAYBOUND" stage_id
 	and delays_var = sprintf "%s.delays" stage_id
 	and round_idx = sprintf "k"
 	and init_round_idx = sprintf "k.0"
-	and top_proc = sprintf "Main.%s" stage_id
 	and delay_label _ = 
 		incr delay_label_idx;
 		sprintf "%s.DELAY.%n" stage_id (!delay_label_idx)
@@ -52,7 +49,7 @@ let delay_bounding rounds delays pgm =
 
 	let gs_decls = 
 		List.map vectorize_var_decl
-		<< List.filter ((=) "var" << D.kind) 
+    << List.filter ((=) "var" << D.kind &&&& (not << D.has "leavealone"))
 		<| Program.decls pgm in
 	
 	let next_decls = List.map (D.rename next) gs_decls
@@ -63,12 +60,39 @@ let delay_bounding rounds delays pgm =
 
 	let save_gs = List.map save gs
 	and next_gs = List.map next gs
-	and init_gs = List.map init gs
 	and guess_gs = List.map guess gs
 	in
 	
 	(* let global_access e gs =  *)
 		
+    
+  let init_predicate_stmts = 
+    (E.ident delays_var |:=| E.num 0)
+    @ List.map (fun g -> Ls.assume (g $=$ init g)) gs
+    @ ( next_gs $::=$ guess_gs )
+  in
+  
+  let validity_predicate_stmts = 
+    List.map (fun g -> Ls.assume (g $=$ guess g)) gs
+    @ ( List.flatten
+        << List.map 
+          (fun i -> 
+            List.map 
+              (fun g -> 
+                Ls.assume (
+                  E.sel (E.ident <| next g) [E.num (i-1)] 
+                  |=| E.sel (E.ident <| init g) [E.num (i)] ))
+                gs ) 
+        <| List.range 1 (rounds-1) )
+  in
+
+    
+  let predicates s =
+    if Ls.has_attr "initial" s then s :: init_predicate_stmts
+    else if Ls.has_attr "validity" s then s :: validity_predicate_stmts
+    else s :: []	
+	in
+    
 	
 	let new_decls = [
     D.const rounds_const T.Int ;
@@ -76,31 +100,6 @@ let delay_bounding rounds delays pgm =
     D.const delays_const T.Int ;
     D.axiom (E.ident delays_const |=| E.num delays) ;
     D.var delays_var T.Int ;
-    D.var err_flag T.Bool ;    
-    D.proc
-      ~attrs:[A.unit "entrypoint"]
-      top_proc
-      ~decls: guess_decls
-      ~body: (
-				(E.ident delays_var |:=| E.num 0)
-				@ (E.ident err_flag |:=| E.bool false)
-				@ [ Ls.assume (gs $==$ init_gs) ]
-				@ (next_gs $::=$ guess_gs)
-				@ [ Ls.call main_proc ~params:[E.num 0];
-					Ls.assume (gs $==$ guess_gs) ]
-					
-				@ ( List.map (fun i -> 
-						Ls.assume
-						<< E.conj
-						<< List.map (fun g -> 
-							E.sel (E.ident <| next g) [E.num (i-1)] 
-							|=| E.sel (E.ident <| init g) [E.num (i)] ) 
-						<| gs )
-				  	<| List.range 1 (rounds-1) )
-					
-				@ [ Ls.assume (E.ident err_flag) ;
-					Ls.return () ]
-			) 
   ] in
 	
 	let translate_yield s =
@@ -116,9 +115,13 @@ let delay_bounding rounds delays pgm =
 
 	and translate_call s =
 		match s with
-		| ls, S.Call (ax,n,ps,rs) ->
+		| ls, S.Call (ax,n,ps,rs) when n = "Main" ->
+      [ ls, S.Call (ax,n,ps@[E.num 0],rs) ]
+
+		| ls, S.Call (ax,n,ps,rs) ->      
 			(* ToDo: return assignments for round_idx *)
 			[ ls, S.Call (ax,n,ps@[E.ident round_idx],rs) ]
+      
 		| _ -> [s]
 
 	and translate_post s =
@@ -136,26 +139,16 @@ let delay_bounding rounds delays pgm =
 			  @ (gs $::=$ next_gs)
 			  @ [Ls.havoc guess_gs]
 			  @ (next_gs $::=$ guess_gs)
-		      @ List.map Ls.stmt [ 
-				S.Call (A.strip "async" ax, n, ps, rs) ;
-			  	S.Assume ([],E.conj (List.map (fun g -> g $=$ guess g) gs)) ]
+	      @ [ 
+          Ls.call ~attrs:(A.strip "async" ax) n ~params:ps ~returns:rs ;
+          Ls.assume (E.conj (List.map (fun g -> g $=$ guess g) gs))
+        ]
 			  @ (gs $::=$ save_gs) 
 			)			
 			
 		| _ -> [s]
+  in
 		
-		
-	and translate_assert s =
-		match s with
-		| ls, S.Assert (_,e) -> 
-			Ls.add_labels ls 
-			<< List.unit
-			<< Ls.ifthenelse ~expr:(E.ident round_idx |<| E.ident rounds_const)
-			<| (E.ident err_flag |:=| ( E.ident err_flag ||| !| e ))
-		| _ -> [s]
-	
-	in	
-	
 	(if List.length gs = 0 then
 		Program.translate
 			~per_stmt_map: 
@@ -170,8 +163,20 @@ let delay_bounding rounds delays pgm =
 	else
 		id
     
-    << Program.add_inline_attribute
-      ~ignore_attrs: ["leavealone"; "entrypoint"]
+    (* << Program.add_inline_attribute *)
+      (* ~ignore_attrs: ["leavealone"; "entrypoint"] *)
+      
+    
+    << Program.translate
+      ~new_local_decls:
+        ( function 
+          | ax, _, _ when A.has "entrypoint" ax -> guess_decls 
+          | _ -> [] )
+      ~per_stmt_map: 
+        ( function
+          | ax, _, _ when A.has "entrypoint" ax ->
+             predicates <=< translate_call
+           | _ -> List.unit )
       
     (* Sequentalization step: translate asynchronous calls to 
        synchronous calls. 
@@ -180,7 +185,7 @@ let delay_bounding rounds delays pgm =
       ~ignore_attrs: ["leavealone"]
 			~new_global_decls: ( init_decls @ next_decls @ new_decls )		
 			~new_proc_params: (const [init_round_idx, T.Int])								
-			~per_stmt_map: (const (translate_post <=< translate_assert))	
+			~per_stmt_map: (const translate_post)	
       
     (* Add extra declarations for procedures which make async calls. *)
     << Program.translate
@@ -198,6 +203,8 @@ let delay_bounding rounds delays pgm =
 			~proc_body_prefix: (const (round_idx $:=$ init_round_idx))
 			~per_stmt_map: (const (translate_call <=< translate_yield))
 			~per_expr_map: (const vectorize_expr)
+      
+    << Program.translate
 
 	)
 	<| pgm

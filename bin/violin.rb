@@ -1,15 +1,15 @@
 #!/usr/bin/env ruby
 
-@version = "0.1"
+MYVERSION = "0.1"
 
-c2s = "c2s"
-boogie = "Boogie"
-cleanup = false
+C2S = "c2s"
+BOOGIE = "Boogie"
+CLEANUP = false
 
-puts "Violin version #{@version}"
+puts "Violin version #{MYVERSION}"
 
 def usage()
-    puts "usage: violin.rb <impl>.bpl <K>"
+    puts "usage: violin.rb <impl>.bpl /rounds:_ /delayBound:_"
 end
 
 def check_file(file,kind,ext)
@@ -33,68 +33,130 @@ def cfg_source(file)
     return file
 end
 
-sources, rest = ARGV.partition{|f| File.extname(f) == ".bpl"}
-delays, rest = rest.partition{|a| a =~ /\/delayBound:[0-9]+/}
-rounds, rest = rest.partition{|a| a =~ /\/rounds:[0-9]+/}
+def prepare()
+  sources, rest = ARGV.partition{|f| File.extname(f) == ".bpl"}
+  rounds, rest = rest.partition{|a| a =~ /\/rounds:[0-9]+/}
+  delays, rest = rest.partition{|a| a =~ /\/delayBound:[0-9]+/}
+  m2s, rest = rest.partition{|a| a =~ /\/multitosingle/}
 
-if sources.empty? then
-	puts "Please specify at least one Boogie source file (.bpl)."
-	exit -1
+  if sources.empty? then
+  	puts "Please specify at least one Boogie source file (.bpl)."
+  	exit -1
+  end
+  
+  sources.each do |f|
+    if not File.exists?(f) then
+      puts "Cannot find file `#{f}'."
+      exit -1
+    end
+  end
+
+  if rounds.empty? then
+  	puts "Please specify the number of rounds with /rounds:_."
+  	exit -1
+  end
+
+  if delays.empty? then
+    puts "Please specify the number of delays with /delayBound:_."
+    exit -1
+  end
+
+  m2s = !m2s.empty?
+
+  rounds = rounds.first.sub(/\/rounds:([0-9]+)/, '\1')
+  delays = delays.first.sub(/\/delayBound:([0-9]+)/, '\1')
+  rest = rest * " "
+
+  src = "#{File.basename(sources.last,'.bpl')}.comp.bpl"
+  puts "Combining [#{sources * ", "}] into #{src}." if sources.length > 1
+  `cat #{sources * " "} > #{src}`
+  
+  puts " #{"-"*78} "
+  return src, rounds, delays, rest
+end 
+
+def sequentialize( src, rounds, delays )  
+
+  ### Translate the specification grammar to a Presburger formula
+  # puts "Translating #{spec}.cfg to #{spec}.parikh.bpl"
+  # `#{c2s} #{spec} --cfg-to-presburger --print #{name}.parikh.bpl`
+
+  ### Instrumentation for linearizability w.r.t. specification checking
+  # puts "Instrumenting #{impl}.bpl"
+  # `#{c2s} #{impl} --violin-instrument #{bound} --print #{name}.inst.bpl`
+  # `cat #{name}.parikh.bpl #{name}.inst.bpl > #{name}.violin.bpl`
+
+  puts "Sequentializing #{src} with #{delays}-delay translation."
+  puts "-- Rounds: #{rounds}"
+  puts "-- Delays: #{delays}"
+  
+  seq = "#{File.basename(src,'.bpl')}.EQR.#{rounds}.#{delays}.bpl"
+
+  cmd = [
+    C2S, src,
+    "--seq-framework",
+    "--delay-bounding #{rounds} #{delays}",
+    "--prepare-for-back-end",
+    "--print #{seq}"
+  ]
+
+  t0 = Time.now
+  output = `#{cmd * " "}`
+  if not $?.success? then
+    puts "Sequentialization failed:"
+    puts "#{cmd * " "}"
+    puts output
+    exit
+  else
+    puts output
+    puts "Finished in #{Time.now - t0}s"
+  end
+
+  puts " #{"-" * 78} "
+  return seq
 end
 
-if delays.empty? then
-	puts "Please specify a delay bound with /delayBound:_."
-	exit -1
+def verify( src, args )  
+  puts "Verifying #{src} with Boogie..."
+  puts "-- /StratifiedInline:1"
+  puts "-- /ExtractLoops"
+  puts "-- /errorLimit:1"
+  puts "-- /errorTrace:2"
+  puts "-- and: #{args.empty? ? "--" : args }"
+
+  cmd = [ 
+    BOOGIE, src, 
+    "/stratifiedInline:1", "/extractLoops", 
+    args, 
+    "/errorLimit:1", "/errorTrace:2"
+  ]
+
+  # other interesting flags: 
+  # /errorLimit:1 -- only one error (per procedure)
+  # /errorTrace:2 -- include all trace labels in error output
+
+  t0 = Time.now
+  output = `#{cmd * " "}`
+  if not $?.success? then
+    puts "Verification failed:"
+    puts "#{cmd * " "}"
+    puts output
+    exit
+  else
+    puts output
+    puts "Finished in #{Time.now - t0}s."
+  end 
+  
+  puts " #{"-" * 78} "
 end
 
-if rounds.empty? then
-	puts "Please specify the number of rounds with /rounds:_."
-	exit -1
+def cleanup( files )
+  if CLEANUP then
+    File.delete( *files )
+  end
 end
 
-delays = delays.first.sub(/\/delayBound:([0-9]+)/, '\1')
-rounds = rounds.first.sub(/\/rounds:([0-9]+)/, '\1')
-rest = rest * " "
-
-name = File.basename(sources.last,".bpl")
-
-comp = "#{name}.comp.bpl"
-
-`cat #{sources * " "} > #{comp}`
-
-### Translate the specification grammar to a Presburger formula
-# puts "Translating #{spec}.cfg to #{spec}.parikh.bpl"
-# `#{c2s} #{spec} --cfg-to-presburger --print #{name}.parikh.bpl`
-
-### Instrumentation for linearizability w.r.t. specification checking
-# puts "Instrumenting #{impl}.bpl"
-# `#{c2s} #{impl} --violin-instrument #{bound} --print #{name}.inst.bpl`
-# `cat #{name}.parikh.bpl #{name}.inst.bpl > #{name}.violin.bpl`
-
-seq = "#{name}.#{delays}-delay.bpl"
-
-puts "Sequentializing #{name} with #{delays}-delay translation."
-puts "-- Rounds: #{rounds}"
-puts "-- Delays: #{delays}"
-cmd = "#{c2s} #{comp} --delay-bounding #{rounds} #{delays} --prepare-for-back-end --print #{seq}"
-
-puts "#{cmd}"
-puts `#{cmd}`
-
-puts "Verifying #{seq} with Boogie..."
-puts "-- StratifiedInline"
-puts "-- ExtractLoops"
-puts "-- and: #{rest}"
-t0 = Time.now
-cmd = "#{boogie} #{seq} /stratifiedInline:1 /extractLoops #{rest} \
-	/errorLimit:1 /errorTrace:2"
-# other interesting flags: 
-# /errorLimit:1 -- only one error (per procedure)
-# /errorTrace:2 -- include all trace labels in error output
-puts "#{cmd}"
-puts `#{cmd}`
-puts "Finished in #{Time.now - t0}s."
-
-# if cleanup then
-#     File.delete( "#{src}.async.bpl" )
-# end
+src, rounds, delays, rest = prepare()
+seq = sequentialize( src, rounds, delays )
+verify( seq, rest )
+cleanup( [src, seq] )

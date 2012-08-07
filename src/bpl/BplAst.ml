@@ -194,8 +194,10 @@ end = struct
 		
 	let map fn = map_fold_to_map map_fold fn
 	let fold fn = map_fold_to_fold map_fold fn
+  
+  let size = fold (fun s _ -> s + 1) 0
 		
-	open PrettyPrinting
+	open PrettyPrinting    
 	let rec print e = match e with
 		| Lit c -> Literal.print c
 		| Id x -> Identifier.print x
@@ -220,8 +222,33 @@ end = struct
 				  <+> print e )
 
 	and print_auto_parens e = if is_term e then print e else parens (print e)
-
 	and print_seq es = sep << punctuate comma << List.map print <| es
+  
+  (* Note: for really huge expressions, the formatting inside of print 
+     can take a long time. For this reason we implement a separate simple
+     print routine without formatting to be used on big expressions. *)
+     
+  let rec to_string e = match e with
+    | Lit c -> Literal.to_string c
+    | Id x -> Identifier.to_string x
+    | Old e -> sprintf "old(%s)" (to_string e)
+    | FnApp (f,es) -> 
+      sprintf "%s(%s)" (Identifier.to_string f) 
+        (String.concat "," <| List.map to_string es)
+    | Not e -> sprintf "!(%s)" (to_string e)
+    | Neg e -> sprintf "-(%s)" (to_string e)
+    | Bin (op,e,e') -> 
+      sprintf "(%s) %s (%s)" (to_string e) (BinaryOp.to_string op) (to_string e')
+    | Sel (e,es) -> 
+      sprintf "%s[%s]" (to_string e) 
+        (String.concat "," <| List.map to_string es)
+    | Upd (e,es,f) -> 
+      sprintf "%s[%s := %s]" (to_string e)
+        (String.concat "," <| List.map to_string es) (to_string f)
+    | Q _ as e -> render <| print e    
+        
+  let print e = if size e > 10 then text (to_string e) else print e
+	let print_seq es = sep << punctuate comma << List.map print <| es
 	let to_string = render << print
 end
 
@@ -740,6 +767,7 @@ and Declaration : sig
     Identifier.t -> t
 
   val attrs : t -> Attribute.t list
+  val has : string -> t -> bool
 	val name : t -> Identifier.t
 	val rename : (Identifier.t -> Identifier.t) -> t -> t
 	val kind : t -> string
@@ -791,6 +819,8 @@ end = struct
 		| TypeCtor (ax,_,_,_) | TypeSyn (ax,_,_,_) | Const (ax,_,_,_,_)
     | Func (ax,_,_,_,_,_)	| Var (ax,_,_,_) | Proc (ax,_,_) | Impl (ax,_,_) 
     | Axiom (ax,_) -> ax
+    
+  let has a = Attribute.has a << attrs
 
 	let name = function
 		| Axiom _ -> "*axiom*"
@@ -965,7 +995,7 @@ end = struct
 				       &&&& (function Declaration.Proc _ -> true | _ -> false)) p *)
 				 
 	open PrettyPrinting
-	let print p = (vcat << List.map Declaration.print <| p) $+$ empty
+	let print p = ( vcat <| List.map Declaration.print p) $+$ empty
 	let to_string = render << print
 end
 
