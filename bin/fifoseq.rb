@@ -46,20 +46,21 @@ def prepare()
   end
 
   if phases.empty? then
-  	puts "Please specify the number of phases with /phaseBound:_."
-  	exit -1
+  	puts "Using default /phaseBound:1."
+  	phases = 1
+  else
+    phases = phases.first.sub(/\/phaseBound:([0-9]+)/, '\1').to_i
   end
 
   if delays.empty? then
-    delays = ["/delayBound:0"]
-    # puts "Please specify a delay bound with /delayBound:_."
-    # exit -1
+  	puts "Using default /delayBound:0."
+    delays = 0
+  else
+    delays = delays.first.sub(/\/delayBound:([0-9]+)/, '\1').to_i
   end
 
   m2s = !m2s.empty?
 
-  phases = phases.first.sub(/\/phaseBound:([0-9]+)/, '\1')
-  delays = delays.first.sub(/\/delayBound:([0-9]+)/, '\1')
   rest = rest * " "
 
   src = "#{File.basename(sources.last,'.bpl')}.comp.bpl"
@@ -110,7 +111,7 @@ def verify( src, args )
   puts "-- /extractLoops"
   puts "-- /errorLimit:1"
   puts "-- /errorTrace:2"
-  puts "-- and: #{args.empty? ? "--" : args }"
+  puts "-- and: #{args}" if not args.empty?
 
   cmd = [ 
     BOOGIE, src, 

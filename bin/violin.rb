@@ -4,7 +4,7 @@ MYVERSION = "0.1"
 
 C2S = "c2s"
 BOOGIE = "Boogie"
-CLEANUP = false
+CLEANUP = true
 
 puts "Violin version #{MYVERSION}"
 
@@ -50,21 +50,23 @@ def prepare()
       exit -1
     end
   end
-
-  if rounds.empty? then
-  	puts "Please specify the number of rounds with /rounds:_."
-  	exit -1
+  
+  if delays.empty? then
+    puts "Using default /delayBound:0."
+    delays = 0
+  else 
+    delays = delays.first.sub(/\/delayBound:([0-9]+)/, '\1').to_i
   end
 
-  if delays.empty? then
-    puts "Please specify the number of delays with /delayBound:_."
-    exit -1
+  if rounds.empty? then
+  	puts "Using default /rounds:#{delays+1}, for /delayBound:#{delays}."
+    rounds = delays + 1
+  else
+    rounds = rounds.first.sub(/\/rounds:([0-9]+)/, '\1').to_i
   end
 
   m2s = !m2s.empty?
 
-  rounds = rounds.first.sub(/\/rounds:([0-9]+)/, '\1')
-  delays = delays.first.sub(/\/delayBound:([0-9]+)/, '\1')
   rest = rest * " "
 
   src = "#{File.basename(sources.last,'.bpl')}.comp.bpl"
@@ -122,7 +124,7 @@ def verify( src, args )
   puts "-- /extractLoops"
   puts "-- /errorLimit:1"
   puts "-- /errorTrace:2"
-  puts "-- and: #{args.empty? ? "--" : args }"
+  puts "-- and: #{args}" if not args.empty?
 
   cmd = [ 
     BOOGIE, src, 
