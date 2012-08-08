@@ -28,6 +28,10 @@ def bpl_source(file)
     return file
 end
 
+def escape(filename)
+  "\"#{filename}\""
+end
+
 def prepare()
   sources, rest = ARGV.partition{|f| File.extname(f) == ".bpl"}
   phases, rest = rest.partition{|a| a =~ /\/phaseBound:[0-9]+/}
@@ -67,7 +71,7 @@ def prepare()
 
   src = "#{File.basename(sources.last,'.bpl')}.comp.bpl"
   puts "Combining [#{sources * ", "}] into #{src}." if sources.length > 1
-  `cat #{sources * " "} > #{src}`
+  `cat #{sources.map{|s| escape(s)} * " "} > #{src}`
   
   puts " #{"-"*78} "
   return src, m2s, phases, delays, rest

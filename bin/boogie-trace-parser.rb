@@ -17,7 +17,7 @@ TRACE_START = /Execution trace:/
 BOOGIE_END = /Boogie program verifier finished/
 
 IDENT = /[A-Za-z0-9_][A-Za-z0-9.$_-]*/
-NUMVAL = /(\d+)/
+NUMVAL = /(-?\d+)/
 TVAL = /T@(#{IDENT})!val!(\d+)/
 VAL = /#{NUMVAL}|#{TVAL}/
 
