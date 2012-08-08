@@ -93,7 +93,12 @@ let delay_bounding rounds delays pgm =
                   E.sel (E.ident <| next g) [E.num (i-1)] 
                   |=| E.sel (E.ident <| init g) [E.num (i)] ))
                 gs ) 
-        <| List.range 1 (rounds-1) )
+                
+        (* Note: technically this should go from 1 to (rounds-1).
+           However, Boogie for some strange reason will not take our
+           generated program when there these constraints are completely
+           absent -- i.e. when rounds < 2. *)
+        <| List.range 1 (rounds) )
   in
 
     
