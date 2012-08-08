@@ -175,12 +175,12 @@ end = struct
         else if List.length xs > 0 
           then failwith (sprintf "Unmatched return assignment for `%s'." n)
         else begin
-          warn (sprintf "Missing return assignments for `%s'; attempting to add them." n);
+          warn "Missing return assignments for `%s'; attempting to add them." n;
           [ ls, Statement.Call (ax,n,es,List.mapi ignore_var_name ts) ]
         end
       end
       | _ -> begin
-        warn (sprintf "Unable to resolve procedure `%s'." n); 
+        warn "Unable to resolve procedure `%s'." n; 
         [s]
       end
     end
@@ -192,7 +192,7 @@ and DeclarationExt : sig
   include module type of Declaration with type t = Declaration.t
 
   val parse : string -> t list
-  val post_parsing : t list -> t list
+  val post_parsing : t -> t
   
 end = struct
 	include Declaration
@@ -207,10 +207,10 @@ end = struct
         end 
     | d -> d
   
-  let post_parsing p = List.map ensure_procedures_end_with_return p
+  let post_parsing = ensure_procedures_end_with_return
   
 	let parse s = 
-    post_parsing
+    List.map post_parsing
     << ParsingUtils.parse_string
       BplParser.declarations_top
 		  BplLexer.token
@@ -231,7 +231,7 @@ end = struct
 		(flip List.minus) (List.map fst ps)
 		<< (flip List.minus) (List.map fst rs)
 		<< (flip List.minus) (List.map Declaration.name ds)
-    <| LabeledStatementExt.modifies ss    
+    <| LabeledStatementExt.modifies ss
     
   (* Recalculate the modifies clause based on global variables 
      which are	actually (recursively) modified in a procedure. *)  
@@ -426,15 +426,32 @@ end = struct
     if exists_stmt (function (_, Statement.Assert _) -> true | _ -> false ) p 
     then warn "Boogie's SI-mode may not handle assertions correctly!";
     p
-  
-  let post_parsing p = DeclarationExt.post_parsing p
-  
-  let pre_boogie p = 
-    check_for_assertions
-    << map_procs (ProcedureExt.fix_modifies p)
-    << map_procs (ProcedureExt.add_return_assign_decls p)
-    << map_stmts (const <| LabeledStatementExt.complete_returns p)
+    
+  let ensure_si_procedures p =
+    let boogie_si_regexp = Str.regexp "boogie_si_record_\\([A-Za-z]+\\)" in
+
+    (flip List.append <| p)
+    << List.map (fun n -> 
+      ignore <| Str.string_match boogie_si_regexp n 0;
+      let t = Type.t (Str.matched_group 1 n) in
+      info "Adding missing procedure declaration `%s'." n;
+      D.Proc ([],n,([],["x",t],[],[],[],[])) )
+    << List.filter (fun n -> find_proc p n = [])
+    << fold_stmts (fun cs -> 
+        function 
+        | (_,Statement.Call (_,n,_,_)) when Str.string_match boogie_si_regexp n 0 ->
+          List.add_uniq n cs
+        | _ -> cs ) []
     <| p
+  
+  let post_parsing p = List.map DeclarationExt.post_parsing p
+  
+  let pre_boogie =
+    check_for_assertions
+    << (fun p -> map_procs (ProcedureExt.fix_modifies p) p)
+    << (fun p -> map_procs (ProcedureExt.add_return_assign_decls p) p)
+    << (fun p -> map_stmts (const <| LabeledStatementExt.complete_returns p) p)
+    << ensure_si_procedures
 	
 	let parse p = 
     post_parsing

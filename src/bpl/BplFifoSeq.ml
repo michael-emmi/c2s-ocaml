@@ -23,12 +23,12 @@ let assumptions pgm =
       when not (A.has "entrypoint" ax) 
       && not (A.has "leavealone" ax)
       && not (List.mem "self" (List.map fst ps @ List.map D.name ds)) ->
-        warn (sprintf "Procedure %s does not have `self' variable." n);
+        warn "Procedure %s does not have `self' variable." n;
         false
     | _ -> true) pgm)
-    then failwith 
+    then failwith
       ( "FiFo sequentialization expects each non-entrypoint procedure " ^
-        "defines a `self' variable." );
+        "defines a `self' variable." ) ;
   
   if not (Program.forall (
     function
@@ -38,7 +38,7 @@ let assumptions pgm =
           | (D.Var (_,_,T.Map(_,ts,_),_))::_ when List.mem (T.t "pid") ts -> true
           | (D.Var (ax,_,_,_))::_ when A.has "leavealone" ax -> true
           | (D.Var _ )::_ ->
-            warn (sprintf "Procedure `%s' modifies non-pid-partitioned state `%s'." n x);
+            warn "Procedure `%s' modifies non-pid-partitioned state `%s'." n x;
             false
           | _ -> true )
         (Procedure.mods p)
@@ -152,7 +152,7 @@ let phase_bounding_simple phase_bound delay_bound p =
   let async_to_sync_call s =
     match s with
     | ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
-      if rs <> [] then warn (sprintf "Found async call (to `%s') with assignments." n);
+      if rs <> [] then warn "Found async call (to `%s') with assignments." n;
       Ls.call ~labels:ls ~attrs:ax n ~params:ps ~returns:rs :: []
       
     | ls, s -> (ls, s)::[]

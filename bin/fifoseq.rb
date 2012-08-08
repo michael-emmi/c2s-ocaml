@@ -4,6 +4,7 @@ MYVERSION = "0.1"
 C2S = "#{File.dirname $0}/c2s"
 BOOGIE = "Boogie"
 CLEANUP = true
+$graph = false
 
 puts "FiFoSeq version #{MYVERSION}"
 
@@ -32,6 +33,7 @@ def prepare()
   phases, rest = rest.partition{|a| a =~ /\/phaseBound:[0-9]+/}
   delays, rest = rest.partition{|a| a =~ /\/delayBound:[0-9]+/}
   m2s, rest = rest.partition{|a| a =~ /\/multitosingle/}
+  graph, rest = rest.partition{|a| a =~ /\/graph(Of)?Trace/}
 
   if sources.empty? then
   	puts "Please specify at least one Boogie source file (.bpl)."
@@ -59,8 +61,8 @@ def prepare()
     delays = delays.first.sub(/\/delayBound:([0-9]+)/, '\1').to_i
   end
 
-  m2s = !m2s.empty?
-
+  m2s = !m2s.empty?  
+  $graph = !graph.empty?
   rest = rest * " "
 
   src = "#{File.basename(sources.last,'.bpl')}.comp.bpl"
@@ -132,7 +134,13 @@ def verify( src, args )
     puts output
     exit
   else
-    puts output
+    if $graph && output =~ /[1-9][0-9]* errors?/ then
+      File.open("#{src}.trace",'w'){|f| f.write(output) }
+      `boogie-trace-parser.rb #{src}.trace`
+      File.delete("#{src}.trace") if CLEANUP
+    else
+      puts output
+    end
     puts "Finished in #{Time.now - t0}s."
   end 
   
@@ -140,9 +148,7 @@ def verify( src, args )
 end
 
 def cleanup( files )
-  if CLEANUP then
-    File.delete( *files )
-  end
+  File.delete( *files ) if CLEANUP
 end
 
 src, m2s, phases, delays, rest = prepare()

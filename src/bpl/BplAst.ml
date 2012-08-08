@@ -935,8 +935,6 @@ module Program : sig
   
   val map : (Declaration.t -> 'a) -> t -> 'a list
   val fold : ('a -> Declaration.t -> 'a) -> 'a -> t -> 'a
-  (*   val find : t -> Identifier.t -> Declaration.t option
-    val find_proc : t -> Identifier.t -> Procedure.t option *)
   val fold_procs : ('a -> Procedure.t -> 'a) -> 'a -> t -> 'a
   val fold_stmts : ('a -> LabeledStatement.t -> 'a) -> 'a -> t -> 'a
   val map_procs : (Procedure.t -> Procedure.t) -> t -> t
@@ -987,12 +985,6 @@ end = struct
 				 match d with
 				 | Declaration.Proc (ax,n,p) -> fn a p
 				 | _ -> a)
-				 (*       
-				   let find p n = List.first ((=) n << Declaration.name) p
-				   let find_proc p n =
-				     Option.seq (function Declaration.Proc (_,_,p) -> Some p | _ -> None)
-				     <| List.first ((=) n << Declaration.name 
-				       &&&& (function Declaration.Proc _ -> true | _ -> false)) p *)
 				 
 	open PrettyPrinting
 	let print p = ( vcat <| List.map Declaration.print p) $+$ empty

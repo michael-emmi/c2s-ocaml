@@ -36,7 +36,9 @@ let fresh_int_fn () =
   let cur = ref 0 in
   fun () -> incr cur; !cur
 
-let warn = Printf.eprintf "WARNING: %s\n"
+let warn fmt = Printf.eprintf ("Warning: " ^^ fmt ^^ "\n")
+let info fmt = Printf.eprintf ("Info: " ^^ fmt ^^ "\n")
+let error fmt = Printf.sprintf ("Error: " ^^ fmt ^^ "\n")
 
 let rec ntimes f x n =
 	if n < 1 then x

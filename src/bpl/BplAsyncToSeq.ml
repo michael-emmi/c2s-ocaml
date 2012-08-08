@@ -32,7 +32,9 @@ let delay_bounding rounds delays pgm =
 	in
 	
 	let delay_label_idx = ref 0 in
-
+  
+  let add_debug_info = true in
+  
 	let guess = fun x -> sprintf "%s.%s.guess" x stage_id
 	and save = fun x-> sprintf "%s.%s.save" x stage_id
 	and next = fun x-> sprintf "%s.%s.next" x stage_id
@@ -68,6 +70,14 @@ let delay_bounding rounds delays pgm =
     
   let init_predicate_stmts = 
     (E.ident delays_var |:=| E.num 0)
+    @ ( if add_debug_info then [ 
+          Ls.call "boogie_si_record_int"
+            ~attrs:[A.unit "leavealone"]
+            ~params:[E.ident rounds_const] ;
+          Ls.call "boogie_si_record_int"
+            ~attrs:[A.unit "leavealone"]
+            ~params:[E.ident delays_const]
+        ] else [] )    
     @ List.map (fun g -> Ls.assume (g $=$ init g)) gs
     @ ( next_gs $::=$ guess_gs )
   in
@@ -105,7 +115,8 @@ let delay_bounding rounds delays pgm =
 	let translate_yield s =
 		if Ls.is_yield s then
       let ss = [
-				Ls.assume ~labels:[delay_label ()] (E.ident round_idx |<| E.ident rounds_const) ;
+				Ls.assume ~labels:[delay_label ()] 
+          (E.ident round_idx |<| (E.ident rounds_const |-| E.num 1)) ;
 				Ls.assume (E.ident delays_var |<| E.ident delays_const) ;
 				Ls.incr (E.ident round_idx) ; 
 				Ls.incr (E.ident delays_var) 
@@ -128,8 +139,7 @@ let delay_bounding rounds delays pgm =
 		match s with
 		| ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
 			if rs <> [] then
-				warn <| 
-				sprintf "Found async call (to procedure `%s') with assignments." n;
+				warn "Found async call (to procedure `%s') with assignments." n;
 			
 			(* let xs = List.filter (fun x -> global_access x gs) ps in *)
 			
@@ -155,8 +165,7 @@ let delay_bounding rounds delays pgm =
 				(fun _ -> function
 				   | ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
 						if rs <> [] then
-							warn <| 
-							sprintf "Found async call (to procedure `%s') with assignments." n;
+							warn "Found async call (to procedure `%s') with assignments." n;
 					 	(ls, S.Call (A.strip "async" ax,n,ps,rs))::[]
 				   | s -> s :: [])
 		<< id
@@ -200,7 +209,14 @@ let delay_bounding rounds delays pgm =
       ~ignore_attrs: ["leavealone"]
 			~replace_global_decls: (fun d -> vectorize_var_decl d :: [])
 			~new_local_decls: (const [D.var round_idx T.Int])
-			~proc_body_prefix: (const (round_idx $:=$ init_round_idx))
+			~proc_body_prefix: 
+        (const 
+            ( (round_idx $:=$ init_round_idx)
+            @ ( if add_debug_info
+                then [ Ls.call "boogie_si_record_int" 
+                  ~attrs:[A.unit "leavealone"]
+                  ~params:[E.ident init_round_idx] ]
+                else [] )))
 			~per_stmt_map: (const (translate_call <=< translate_yield))
 			~per_expr_map: (const vectorize_expr)
       
