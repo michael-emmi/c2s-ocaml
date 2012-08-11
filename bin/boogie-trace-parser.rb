@@ -3,7 +3,7 @@
 MYVERSION = "0.1"
 C2S = "#{File.dirname $0}/c2s"
 BOOGIE = "Boogie"
-CLEANUP = true
+$cleanup = true
 
 # puts "Boogie Trace Parser version #{MYVERSION}"
 
@@ -56,7 +56,7 @@ def trace_to_graph(t)
 end
 
 def step_to_graph(s,m,vals,g)
-  if s[:proc] then
+  if s.is_a?(Hash) and s[:proc] then
     n = new_node()
     vs = []
     
@@ -147,4 +147,8 @@ pdf_file = File.basename(input_file) + ".pdf"
 g = top( IO.readlines(input_file) )
 File.open(dot_file,'w') {|f| f.write(g)}
 `dot -Tpdf #{dot_file} -o#{pdf_file} && open #{pdf_file}`
-File.delete(*[dot_file, pdf_file])
+begin
+  File.delete(*[dot_file, pdf_file]) if $cleanup
+rescue
+  # ignore cleanup problems.
+end
