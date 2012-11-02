@@ -148,10 +148,16 @@ let delay_bounding rounds delays pgm =
 			if rs <> [] then
 				warn "Found async call (to procedure `%s') with assignments." n;
 			
-			(* let xs = List.filter (fun x -> global_access x gs) ps in *)
-			
 			Ls.add_labels ls (
-				(* ToDo: evaluate arguments so globals can be saved. *)
+        
+        (* Map global variables in argument expressions 
+        * to their "saved" values *)
+        let ps = List.map (E.map (fun e -> 
+          match e with
+          | E.Id x when List.mem x gs -> E.Id (save x)
+          | _ -> e
+        )) ps in
+        
 			  (save_gs $::=$ gs)
 			  @ (gs $::=$ next_gs)
 			  @ [Ls.havoc guess_gs]
