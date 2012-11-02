@@ -12,6 +12,8 @@ module Tr = BplSeqFramework
 
 let stage_id = "A2S"
 
+let is_main (_,n,_) = n = "Main"
+
 (** An encoding of the depth-first task-scheduling order, a restriction of 
  * the unordered (i.e., "bag") semantics.*)
 let delay_bounding rounds delays pgm =
@@ -43,6 +45,7 @@ let delay_bounding rounds delays pgm =
 	and delays_const = sprintf "%s.DELAYBOUND" stage_id
 	and delays_var = sprintf "%s.delays" stage_id
 	and round_idx = sprintf "k"
+  and ignore_round_idx = sprintf "k.ignore"
 	and init_round_idx = sprintf "k.0"
 	and delay_label _ = 
 		incr delay_label_idx;
@@ -134,12 +137,11 @@ let delay_bounding rounds delays pgm =
 		| ls, S.Call (ax,n,ps,rs) when n = "Main" ->
       [ ls, S.Call (ax,n,ps@[E.num 0],rs) ]
 
-		| ls, S.Call (ax,n,ps,rs) ->      
-			(* ToDo: return assignments for round_idx *)
-			[ ls, S.Call (ax,n,ps@[E.ident round_idx],rs) ]
-      
-		| _ -> [s]
+		| ls, S.Call (ax,n,ps,rs) when not (A.has "async" ax) ->      
+			[ ls, S.Call (ax,n,ps@[E.ident round_idx],rs@[round_idx]) ]
 
+		| _ -> [s]
+    
 	and translate_post s =
 		match s with
 		| ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
@@ -155,7 +157,9 @@ let delay_bounding rounds delays pgm =
 			  @ [Ls.havoc guess_gs]
 			  @ (next_gs $::=$ guess_gs)
 	      @ [ 
-          Ls.call ~attrs:(A.strip "async" ax) n ~params:ps ~returns:rs ;
+          Ls.call ~attrs:(A.strip "async" ax) n 
+            ~params:(ps@[E.ident round_idx]) 
+            ~returns:(rs@[ignore_round_idx]) ;
           Ls.assume (E.conj (List.map (fun g -> g $=$ guess g) gs))
         ]
 			  @ (gs $::=$ save_gs) 
@@ -213,7 +217,9 @@ let delay_bounding rounds delays pgm =
 		<< Program.translate
       ~ignore_attrs: ["leavealone"]
 			~replace_global_decls: (fun d -> vectorize_var_decl d :: [])
-			~new_local_decls: (const [D.var round_idx T.Int])
+      ~new_global_decls: ( [D.var ignore_round_idx T.Int] )
+      ~new_local_decls: (fun pc -> if is_main pc then [D.var round_idx T.Int] else [])
+			~new_proc_rets: (fun pc -> if is_main pc then [] else [round_idx, T.Int])
 			~proc_body_prefix: 
         (const 
             ( (round_idx $:=$ init_round_idx)

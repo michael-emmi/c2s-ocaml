@@ -3,7 +3,7 @@
 MYVERSION = "0.1"
 C2S = "#{File.dirname $0}/c2s"
 BOOGIE = "Boogie"
-CLEANUP = true
+CLEANUP = false
 $graph = false
 
 puts "FiFoSeq version #{MYVERSION}"
