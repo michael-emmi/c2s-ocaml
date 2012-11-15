@@ -59,6 +59,8 @@
 %type <BplAst.LabeledStatement.t list> labeled_statements_top
 %type <BplAst.Expression.t> expression_top
 
+%type <BplAst.Trigger.t list * BplAst.Attribute.t list> triggers_and_attributes_opt
+
 %nonassoc LPAREN RPAREN
 %left COLON
 %left IF THEN ELSE
@@ -296,9 +298,21 @@ attr_arg:
   | STRING_LIT { Right $1 }
 ;  
 
-triggers_and_attributes_opt:
-	{ [] }
+trigger:
+  LBRACE expressions RBRACE { $2 }
 ;
+
+triggers_and_attributes_opt:
+	{ [], [] }
+  | triggers_and_attributes { $1 }
+;
+
+triggers_and_attributes:
+  trigger { $1 :: [], [] }
+  | trigger triggers_and_attributes { ($1 :: fst $2), snd $2 }
+  | attribute { [], $1 :: [] }
+  | attribute triggers_and_attributes { fst $2, ($1 :: snd $2) }
+;  
 
 /* ToDo: Where */
 /* where_opt:
@@ -470,8 +484,7 @@ expression:
 
   | LPAREN quantifier type_args_opt typed_identifiers_seq QSEP 
 		  triggers_and_attributes_opt expression RPAREN
-	  { let ax, ts = Either.separate $6 in
-		E.Q ($2,$3,$4,ax,ts,$7) }
+	  { E.Q ($2,$3,$4, snd $6, fst $6, $7) }
 
   | LPAREN expression RPAREN { $2 }
 ;

@@ -17,9 +17,11 @@ TRACE_START = /Execution trace:/
 BOOGIE_END = /Boogie program verifier finished/
 
 IDENT = /[A-Za-z0-9_][A-Za-z0-9.$_-]*/
+BOOLVAL = /(false|true)/
 NUMVAL = /(-?\d+)/
+SEPVAL = /T@sep!val!\d+/
 TVAL = /T@(#{IDENT})!val!(\d+)/
-VAL = /#{NUMVAL}|#{TVAL}/
+VAL = /#{BOOLVAL}|#{NUMVAL}|#{TVAL}/
 
 INTRAPROC_STEP = /(.*)\.bpl\(\d+,\d+\): #{IDENT}/
 VALUE_STEP = /value = (#{VAL})/
@@ -72,7 +74,9 @@ def step_to_graph(s,m,vals,g)
 end
 
 def clean_val(v)
-  if m = v.match(TVAL) then
+  if m = v.match(SEPVAL) then
+    "|"
+  elsif m = v.match(TVAL) then
     "#{m[1]}:#{m[2]}"
   elsif m = v.match(NUMVAL) then
     "#{m[1]}"

@@ -435,7 +435,7 @@ end = struct
       ignore <| Str.string_match boogie_si_regexp n 0;
       let t = Type.t (Str.matched_group 1 n) in
       info "Adding missing procedure declaration `%s'." n;
-      D.Proc ([],n,([],["x",t],[],[],[],[])) )
+      D.Proc ([A.unit "leavealone"],n,([],["x",t],[],[],[],[])) )
     << List.filter (fun n -> find_proc p n = [])
     << fold_stmts (fun cs -> 
         function 
