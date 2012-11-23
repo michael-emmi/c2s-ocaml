@@ -3,7 +3,7 @@
 MYVERSION = "0.1"
 C2S = "#{File.dirname $0}/c2s"
 BOOGIE = "Boogie"
-$cleanup = true
+$cleanup = false
 
 # puts "Boogie Trace Parser version #{MYVERSION}"
 
@@ -150,9 +150,13 @@ dot_file = File.basename(input_file) + ".dot"
 pdf_file = File.basename(input_file) + ".pdf"
 g = top( IO.readlines(input_file) )
 File.open(dot_file,'w') {|f| f.write(g)}
-`dot -Tpdf #{dot_file} -o#{pdf_file} && open #{pdf_file}`
-begin
-  File.delete(*[dot_file, pdf_file]) if $cleanup
-rescue
-  # ignore cleanup problems.
+if system("dot -Tpdf #{dot_file} -o#{pdf_file}") then
+  system("open #{pdf_file}")
+  begin
+    File.delete(*[dot_file, pdf_file]) if $cleanup
+  rescue
+    # ignore cleanup problems.
+  end
+else
+  puts "Failed to generate #{pdf_file} with Dot."
 end
