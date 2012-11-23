@@ -199,11 +199,10 @@ end = struct
 
   let ensure_procedures_end_with_return = 
     function
-    | Proc (ax,n,(tx,ps,rs,sx,ds,ss)) as d ->
-        if ss = [] then d
-        else begin match List.last ss with
+    | Proc (ax,n,(tx,ps,rs,sx,Some(ds,((_::_) as ss)))) as d ->
+        begin match List.last ss with
         | _, Statement.Return -> d
-        | _ -> Proc (ax,n,(tx,ps,rs,sx,ds,ss@[LabeledStatement.return ()]))
+        | _ -> Proc (ax,n,(tx,ps,rs,sx,Some(ds,ss@[LabeledStatement.return ()])))
         end 
     | d -> d
   
@@ -227,42 +226,47 @@ end = struct
   include Procedure
   
   (* Variables modified by a procedure. *)
-  let mods (_,ps,rs,_,ds,ss) =
-		(flip List.minus) (List.map fst ps)
-		<< (flip List.minus) (List.map fst rs)
-		<< (flip List.minus) (List.map Declaration.name ds)
-    <| LabeledStatementExt.modifies ss
+  let mods (_,ps,rs,_,bd) =
+    Option.reduce 
+      (fun (ds,ss) -> 
+    		(flip List.minus) (List.map fst ps)
+    		<< (flip List.minus) (List.map fst rs)
+    		<< (flip List.minus) (List.map Declaration.name ds)
+        <| LabeledStatementExt.modifies ss )
+      [] bd 
     
   (* Recalculate the modifies clause based on global variables 
      which are	actually (recursively) modified in a procedure. *)  
-  let fix_modifies pgm ((tx,ps,rs,sx,ds,ss) as p) =
-    let sx = List.filter (function Specification.Modifies _ -> false | _ -> true) sx 
-    and ms = 
+  let fix_modifies pgm ((tx,ps,rs,sx,bd) as p) =
+    let ms = Option.reduce (
       ProgramExt.fold_over_calls pgm 
       ( fun ms p -> List.union ms (mods p) )
-      ( mods p )
-      ss
-    in tx, ps, rs, sx @ (match ms with [] -> [] | _ -> [Specification.Modifies (false,ms)]), ds, ss
+      ( mods p ) << snd ) [] bd
+    in tx, ps, rs, 
+       sx @ (List.reduce (fun ms -> [Specification.Modifies (false,ms)]) [] ms), 
+       bd
 
   (* Declarations for variables introduced because of 
      return-assignment completion. *)
-  let add_return_assign_decls pgm (tx,ps,rs,sx,ds,ss) =
-    let ignore_var_name i =	sprintf "__ignore_%n_%s" i << Type.stringify
-    and max_rets = ProgramExt.fold_procs (flip <| fun (_,_,rs,_,_,_) -> max (List.length rs)) 0
-    and incomplete = LabeledStatementExt.incomplete_calls pgm ss in
-    let ds' = 
-    	Option.cat
-    	<< List.map
-    		(fun (i,t) ->
-    			 if List.exists
-    				 (fun ts -> i < List.length ts && List.nth ts i = t)
-    				 incomplete
-    			 then Some (Declaration.var (ignore_var_name i t) t)
-    			 else None)		
-    	<| List.product 
-        (List.range 0 (max_rets pgm))
-        [ Type.Bool; Type.Int; Type.Map ([],[Type.Int],Type.Int) ]
-    in tx,ps,rs,sx,ds@ds',ss
+  let add_return_assign_decls pgm (tx,ps,rs,sx,bd) =
+    tx, ps, rs, sx, Option.map (fun (ds,ss) ->
+      let ignore_var_name i =	sprintf "__ignore_%n_%s" i << Type.stringify
+      and max_rets = ProgramExt.fold_procs (flip <| fun (_,_,rs,_,_) -> max (List.length rs)) 0
+      and incomplete = LabeledStatementExt.incomplete_calls pgm ss in
+    	ds @ begin
+        Option.cat
+      	<< List.map
+      		(fun (i,t) ->
+      			 if List.exists
+      				 (fun ts -> i < List.length ts && List.nth ts i = t)
+      				 incomplete
+      			 then Some (Declaration.var (ignore_var_name i t) t)
+      			 else None)		
+      	<| List.product 
+          (List.range 0 (max_rets pgm))
+          [ Type.Bool; Type.Int; Type.Map ([],[Type.Int],Type.Int) ]
+      end, ss
+    ) bd
 end
 
 and ProgramExt : sig
@@ -366,15 +370,16 @@ end = struct
 		
 		List.append new_global_decls
 		<< List.flatten << map (
-			function Declaration.Proc (ax,n,((ts,ps,rs,es,ds,ss) as p))
+			function Declaration.Proc (ax,n,((ts,ps,rs,es,bd) as p))
       when not (ignore ax) ->
 				let ps' = ps @ new_proc_params (ax,n,p)
 				and rs' = rs @ new_proc_rets (ax,n,p)
-				and ds' = ds @ new_local_decls (ax,n,p) in
-        
-        (* Add the suffix just before each return statement.
-          Note: we assume each procedure ends with a return. *)
-        let ss' = 
+
+        and bd' = Option.map (fun (ds,ss) ->          
+				  ds @ new_local_decls (ax,n,p),
+                  
+          (* Add the suffix just before each return statement.
+            Note: we assume each procedure ends with a return. *)
           List.append (proc_body_prefix (ax,n,p))
           << snd << LabeledStatement.map_fold_stmts
             ( fun () s -> 
@@ -382,8 +387,8 @@ end = struct
               | ls, Statement.Return -> (), proc_body_suffix (ax,n,p) @ [s]
               | _ -> (), [s] )
             () <| ss 
-            
-				in Declaration.Proc (ax,n,(ts,ps',rs',es,ds',ss')) :: []
+        ) bd
+				in Declaration.Proc (ax,n,(ts,ps',rs',es,bd')) :: []
 			| d -> d :: [] )
       
 		<< List.flatten 
@@ -435,7 +440,7 @@ end = struct
       ignore <| Str.string_match boogie_si_regexp n 0;
       let t = Type.t (Str.matched_group 1 n) in
       info "Adding missing procedure declaration `%s'." n;
-      D.Proc ([A.unit "leavealone"],n,([],["x",t],[],[],[],[])) )
+      D.Proc ([A.unit "leavealone"],n,([],["x",t],[],[],None)) )
     << List.filter (fun n -> find_proc p n = [])
     << fold_stmts (fun cs -> 
         function 

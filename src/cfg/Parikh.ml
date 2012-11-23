@@ -26,10 +26,11 @@ let image_of_cfg g =
 	
 	List.snoc []
 	<< (fun e -> 
-			D.Proc ([A.num "inline" 1], "Violin.PresburgerInvariant", (
-				[], List.map (fun x -> sprintf "x.%s" x, T.Int) (G.alphabet g),
-				[], [], [], [ Ls.stmt (S.Assert ([],e)) ]
-			)))
+      D.proc "Violin.PresburgerInvariant"
+        ~attrs:[A.num "inline" 1]
+        ~params:(List.map (fun x -> sprintf "x.%s" x, T.Int) (G.alphabet g))
+        ~body:[Ls.stmt (S.Assert ([],e))]
+			)
 	<< E.exists (
 		List.map (fun p -> sprintf "y.p%n" (List.assoc p pidx), T.Int) (G.rules g)
 		@ List.map (fun a -> sprintf "z.%s" a, T.Int) (G.alphabet g @ G.variables g) )

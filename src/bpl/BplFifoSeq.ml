@@ -19,7 +19,7 @@ let assumptions pgm =
 
   if not (Program.forall (
     function 
-    | D.Proc (ax,n,(_,ps,_,_,ds,_)) 
+    | D.Proc (ax,n,(_,ps,_,_,Some(ds,_))) 
       when not (A.has "entrypoint" ax) 
       && not (A.has "leavealone" ax)
       && not (List.mem "self" (List.map fst ps @ List.map D.name ds)) ->

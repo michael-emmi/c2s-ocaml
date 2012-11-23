@@ -53,7 +53,7 @@ let async_to_seq p =
 	Program.translate
 		~replace_global_decls: (
 			function D.Axiom (ax,e) when A.has "dispatch" ax -> []
-			| D.Proc (ax,n,(ts,ps,rs,es,ds,ss)) ->
+			| D.Proc (ax,n,(ts,ps,rs,es,bd)) ->
 				let posts, es = 
 					List.fold_left 
 						( fun (ps,es) sp -> match sp with
@@ -72,7 +72,7 @@ let async_to_seq p =
 					
 				(* let ax = if n = "Main" then (A.num "inline" 1 :: ax) else ax in *)
 										
-				[ D.Proc (ax,n,(ts,ps,rs,es@notPosted,ds,ss)) ]
+				[ D.Proc (ax,n,(ts,ps,rs,es@notPosted,bd)) ]
 
 			| d -> [d]
 				

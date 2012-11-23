@@ -271,31 +271,19 @@ and proc pgm ax n (ps,ts,reqs,ens,ds,ss) =
 		&& not (List.exists ((=) "modular" << fst) ax)
 	in
 
-	DD.Proc (
-		(* Attributes. *)
-		( if not do_inline then [] 
-		  else BplAst.Attribute.num "inline" inline_depth :: [] )
+	DD.proc n
+    ~attrs:(
+      ( if not do_inline then [] 
+        else BplAst.Attribute.num "inline" inline_depth :: [] )
 
-		@ ( List.map attr
-			(* NOTE: strip "modular" and "inline" attributes. *)
-			<< List.filter ((<>) "modular" &&&& (<>) "inline" << fst)
-			<| ax ),
-
-		(* Name. *)
-		n,
-
-		(
-
-			(* Type arguments. *)
-			[],
-
-			(* Input parameters. *)
-			List.map (Tup2.map param_to_init id) params,
-
-			(* Return variables. *)
-			List.combine rs (List.map snd ts),
-
-			(* Specification.. *)
+      @ ( List.map attr
+          (* NOTE: strip "modular" and "inline" attributes. *)
+          << List.filter ((<>) "modular" &&&& (<>) "inline" << fst)
+        <| ax )
+    )
+		~params:(List.map (Tup2.map param_to_init id) params)
+		~returns:(List.combine rs (List.map snd ts))
+    ~spec:(
 			( List.reduce
 				  ( fun ms ->
 						BplAst.Specification.Modifies ( false, ms ) :: [])
@@ -315,10 +303,10 @@ and proc pgm ax n (ps,ts,reqs,ens,ds,ss) =
 					@ List.map
 						(fun e -> BplAst.Specification.Ensures (false,e))
 						ens
-				end ),
-
-			(* Declarations.. *)
-			( List.map (fun (x,t) -> DD.Var ([],x,t,None)) mod_params )
+				end )
+    )		
+		~decls:(
+      ( List.map (fun (x,t) -> DD.Var ([],x,t,None)) mod_params )
 			@ ( List.map (function
 						  | (D.Var (ax,x,t) | D.Const (ax,x,t,None)) ->
 								DD.Var ( List.map attr ax,
@@ -327,21 +315,18 @@ and proc pgm ax n (ps,ts,reqs,ens,ds,ss) =
 								DD.Var ( List.map attr ax,
 										 ident x, type_ t, 
 										 Some (expr (E.ident x |=| e)) )
-						  | _ -> failwith "!" ) ds ),
-
-			(* Statements.. *)
-			( match mod_params with
-			  | [] -> id
-			  | ms -> List.cons (
+						  | _ -> failwith "!" ) ds )
+    )
+    ~body:(
+      ( match mod_params with
+        | [] -> id
+        | ms -> List.cons (
 					[], SS.Assign (
 						List.map (LLv.ident << fst) mod_params,
 						List.map
 							( EE.ident << param_to_init << fst) ms)))
 				bpl_ss
-		)
- 	)
-
-		
+    )		
 
 let program pgm = 
 	List.flatten 

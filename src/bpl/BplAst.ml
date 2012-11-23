@@ -661,8 +661,7 @@ module rec Procedure : sig
 			* (Identifier.t * Type.t) list
 			* (Identifier.t * Type.t) list
 			* Specification.t list
-			* Declaration.t list
-			* LabeledStatement.t list
+			* (Declaration.t list * LabeledStatement.t list) option
 
 	val signature : t -> Type.t list * Type.t list
 	val stmts : t -> LabeledStatement.t list
@@ -680,26 +679,29 @@ end = struct
 			* (Identifier.t * Type.t) list
 			* (Identifier.t * Type.t) list
 			* Specification.t list
-			* Declaration.t list
-			* LabeledStatement.t list
+			* (Declaration.t list * LabeledStatement.t list) option
 			
 	module Ls = LabeledStatement
 
-	let signature (_,ps,rs,_,_,_) = List.map snd ps, List.map snd rs
-	let stmts (_,_,_,_,_,ss) = ss
+	let signature (_,ps,rs,_,_) = List.map snd ps, List.map snd rs
+	let stmts (_,_,_,_,bd) = Option.list <| Option.map snd bd
 
-	let map_exprs fn (tx,ps,rs,sx,ds,ss) =
+	let map_exprs fn (tx,ps,rs,sx,bd) =
 		tx,ps,rs,
 		List.map (Specification.map_exprs fn) sx,
-		ds,
-		List.map (Ls.map_exprs fn) ss
+    Option.map (Tup2.map id (List.map (Ls.map_exprs fn))) bd
     
-  let map_fold_stmts fn a (tx,ps,rs,sx,ds,ss) =
-    let a, ss = Ls.map_fold_stmts fn a ss in
-    a, (tx,ps,rs,sx,ds,ss)
+  let map_fold_stmts fn a (tx,ps,rs,sx,bd) =
+    let a, bd = 
+      Option.map_fold ( Tup2.map_fold 
+        (curry <| Tup2.map id id) 
+        (Ls.map_fold_stmts fn) ) a bd 
+    in
+    (* let a, ss = Ls.map_fold_stmts fn a ss in *)
+    a, (tx,ps,rs,sx,bd)
 
 	open PrettyPrinting
-	let print impl ats n (ts,ps,rs,es,ds,ss) =
+	let print impl ats n (ts,ps,rs,es,bd) =
 		(if impl then keyword "implementation" else keyword "procedure") 
 		<+> Attribute.print_seq ats
 		<+> Identifier.print n
@@ -708,14 +710,15 @@ end = struct
 		$-$ ( match rs with [] -> empty
 			  | _ -> indent indent_size (
 					keyword "returns" <+> parens (Type.print_typed_ids rs) ))
-		<-> ( match ds,ss with [],[] -> semi | _ -> empty )
-			$-$ indent indent_size (Specification.print_seq es)
-			$-$ ( match ds,ss with [],[] -> empty
-				  | _ -> lbrace
-						$-$ ( match ds with [] -> empty 
-							  | _ -> indent indent_size (Declaration.print_seq ds) )
-						$-$ indent indent_size (LabeledStatement.print_seq ss)
-						$-$ rbrace )
+    <-> ( Option.reduce (const empty) semi bd )
+		$-$ indent indent_size (Specification.print_seq es)
+    $-$ option (fun (ds,ss) -> 
+          lbrace
+					$-$ ( match ds with [] -> empty 
+						  | _ -> indent indent_size (Declaration.print_seq ds) )
+					$-$ indent indent_size (LabeledStatement.print_seq ss)
+          $-$ rbrace
+        ) bd
 	let to_string impl ax n = render << print impl ax n
 end
 	
@@ -812,8 +815,7 @@ end = struct
     ?body:ss n =
     Proc ( Option.list ax, n, (
       Option.list tx, Option.list ps, Option.list rs,
-      Option.list es, Option.list ds, Option.list ss
-    ))
+      Option.list es, Option.listjoin ds ss ))
 
   let attrs = function
 		| TypeCtor (ax,_,_,_) | TypeSyn (ax,_,_,_) | Const (ax,_,_,_,_)

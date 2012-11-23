@@ -40,28 +40,21 @@ let seq_framework  =
   Program.translate
     ~new_global_decls: [ 
       D.Var ([A.unit "leavealone"],err_flag,T.Bool,None) ;
-      D.Proc ( 
-        [A.unit "leavealone"]
-        
-          (* Boogie's /stratifiedInline mode wants you to specify some
-             entrypoint procedures. *)
-          @ (if boogie_si_mode then [A.unit "entrypoint"] else []), 
-          
-        top_proc_name, ([],[],[],[],[],(
+            
+      D.proc top_proc_name
+        ~attrs:( (A.unit "leavealone") :: (if boogie_si_mode then [A.unit "entrypoint"] else []) )
+        ~body:(
           (E.ident err_flag |:=| E.bool false)
           @ [ Ls.skip ~attrs:[A.unit "initial"] () ]
           @ [ Ls.call main_proc_name ]
           @ [ Ls.skip ~attrs:[A.unit "validity"] () ]
-
           @ [ if boogie_si_mode 
               (* Boogie's /stratifiedInline mode checks whether an entrypoint
                  procedure can return. *)
               then Ls.assume (E.ident err_flag) 
               else Ls.assert_ (!| (E.ident err_flag)) ]
-
           @ [ Ls.return () ]
-        ))
-      )
+        )
     ]
       
     ~per_stmt_map: (fun n s -> 

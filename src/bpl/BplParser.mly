@@ -137,7 +137,7 @@ declaration:
 		  procedure_signature SEMI
 		  procedure_specs_opt {
 			  let ts, ps, rs = $4 in
-			  D.Proc ($2,$3,(ts,ps,rs,$6,[],[])) :: []
+			  D.Proc ($2,$3,(ts,ps,rs,$6,None)) :: []
 		  } 
 	/* | PROCEDURE identifier procedure_signature
 		  LBRACE RBRACE {
@@ -148,13 +148,13 @@ declaration:
 		  procedure_specs_opt
 		  LBRACE var_decls_opt labeled_statements_opt RBRACE {
 			  let ts, ps, rs = $4 in
-			  D.Proc ($2,$3,(ts,ps,rs,$5,$7,$8)) :: []
+			  D.Proc ($2,$3,(ts,ps,rs,$5,Some($7,$8))) :: []
 		  }
   | IMPLEMENTATION attributes_opt identifier
 		  procedure_signature
 		  LBRACE var_decls_opt labeled_statements_opt RBRACE {
 			  let ts, ps, rs = $4 in
-			  D.Impl ($2,$3,(ts,ps,rs,[],$6,$7)) :: []
+			  D.Impl ($2,$3,(ts,ps,rs,[],Some($6,$7))) :: []
 		  } 
 ;
 

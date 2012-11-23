@@ -339,6 +339,19 @@ module Option = struct
     
   let bool o = reduce id false o
   let list o = reduce id [] o
+  
+  let combine o p = 
+    match o, p with
+    | Some x, Some y -> Some (x,y)
+    | None, None -> None
+    | _ -> invalid_arg "Option.combine"
+    
+  let listjoin o p =
+    match o, p with
+    | Some x, Some y -> Some (x,y)
+    | Some x, None -> Some (x,[])
+    | None, Some y -> Some ([],y)
+    | _ -> None    
 
   let to_string fn =
 	  reduce (Printf.sprintf "Some (%s)" << fn) "None"
