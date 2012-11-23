@@ -57,14 +57,13 @@ let async_to_seq p =
 				let posts, es = 
 					List.fold_left 
 						( fun (ps,es) sp -> match sp with
-							| Sp.Posts (_,ids) -> ids @ ps, es
+              | Sp.Modifies (_,ax,ids) when A.has "posts" ax -> ids @ ps, es
 							| e -> ps, e::es )
 						([],[])
 					<| es in
 					
 				let notPosted = 
-					List.map ( fun p -> 
-						Sp.Ensures ( false, E.parse (
+					List.map ( fun p -> Sp.ensures ( E.parse (
 							sprintf "pending[%s] == old(pending[%s])" p p)))
 					<< List.filter (not << (flip List.mem <| posts))
 					<| asyncCalls

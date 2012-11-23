@@ -286,7 +286,7 @@ and proc pgm ax n (ps,ts,reqs,ens,ds,ss) =
     ~spec:(
 			( List.reduce
 				  ( fun ms ->
-						BplAst.Specification.Modifies ( false, ms ) :: [])
+						BplAst.Specification.Modifies ( false, [AA.unit "inferred"], ms ) :: [])
 				  []
 			  << (flip List.minus) (List.map D.name ps)
 			  << (flip List.minus) (List.map D.name ds)
@@ -298,10 +298,10 @@ and proc pgm ax n (ps,ts,reqs,ens,ds,ss) =
 			@ ( if do_inline then []
 				else begin
 					List.map
-						(fun e -> BplAst.Specification.Requires (false,e))
+						(fun e -> BplAst.Specification.Requires (false,[],e))
 						reqs
 					@ List.map
-						(fun e -> BplAst.Specification.Ensures (false,e))
+						(fun e -> BplAst.Specification.Ensures (false,[],e))
 						ens
 				end )
     )		

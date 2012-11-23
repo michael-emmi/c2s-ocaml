@@ -616,39 +616,44 @@ end
 
 
 module Specification = struct
-	type t = Requires of bool * Expression.t
-			 | Modifies of bool * Identifier.t list
-			 | Ensures of bool * Expression.t
-			 | Posts of bool * Identifier.t list
-
+	type t = Requires of bool * Attribute.t list * Expression.t
+			 | Modifies of bool * Attribute.t list * Identifier.t list
+			 | Ensures of bool * Attribute.t list * Expression.t
+       
+  let requires ?free:fr ?attrs:ax e = Requires (Option.bool fr, Option.list ax, e)
+  let ensures ?free:fr ?attrs:ax e = Ensures (Option.bool fr, Option.list ax, e)
+  let modifies ?free:fr ?attrs:ax e = Modifies (Option.bool fr, Option.list ax, e)
+  
 	let map_fold_exprs fn a = 
 		function
-		| Requires (fr,e) -> 
+		| Requires (fr,ax,e) -> 
 			let a, e = Expression.map_fold fn a e in 
-			a, Requires (fr,e)
-		| Ensures (fr,e) -> 
+			a, Requires (fr,ax,e)
+		| Ensures (fr,ax,e) -> 
 			let a, e = Expression.map_fold fn a e in 
-			a, Ensures (fr,e)
+			a, Ensures (fr,ax,e)
 		| sp -> a, sp
 	let map_exprs fn = map_fold_to_map map_fold_exprs fn
 
 	open PrettyPrinting
 	let print = function
-		| Requires (f,e) ->
+		| Requires (f,ax,e) ->
 			  ( if f then keyword "free" else empty )
-			  <+> keyword "requires" <+> Expression.print e
+			  <+> keyword "requires"
+        <+> Attribute.print_seq ax
+        <+> Expression.print e
 			  <-> semi
-		| Modifies (f,e) ->
+		| Modifies (f,ax,e) ->
 			  ( if f then keyword "free" else empty )
-			  <+> keyword "modifies" <+> Identifier.print_seq e
+			  <+> keyword "modifies"
+        <+> Attribute.print_seq ax
+        <+> Identifier.print_seq e
 			  <-> semi
-		| Ensures (f,e) ->
+		| Ensures (f,ax,e) ->
 			  ( if f then keyword "free" else empty )
-			  <+> keyword "ensures" <+> Expression.print e
-			  <-> semi
-		| Posts (f,e) ->
-			  ( if f then keyword "free" else empty )
-			  <+> keyword "posts" <+> Identifier.print_seq e
+			  <+> keyword "ensures"
+        <+> Attribute.print_seq ax
+        <+> Expression.print e
 			  <-> semi
 	let print_seq = vcat << List.map print
 	let to_string = render << print

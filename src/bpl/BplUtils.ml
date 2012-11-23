@@ -243,7 +243,7 @@ end = struct
       ( fun ms p -> List.union ms (mods p) )
       ( mods p ) << snd ) [] bd
     in tx, ps, rs, 
-       sx @ (List.reduce (fun ms -> [Specification.Modifies (false,ms)]) [] ms), 
+       sx @ (List.reduce (fun ms -> [Specification.modifies ms]) [] ms), 
        bd
 
   (* Declarations for variables introduced because of 

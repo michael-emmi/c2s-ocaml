@@ -199,11 +199,10 @@ procedure_specs:
 ;
 
 procedure_spec:
-	free_opt REQUIRES expression { Specification.Requires ($1,$3) }
-  | free_opt MODIFIES identifiers { Specification.Modifies ($1,$3) }
-  | free_opt ENSURES expression { Specification.Ensures ($1,$3) }
-  | free_opt POSTS identifiers { Specification.Posts ($1,$3)}
-; 
+	free_opt REQUIRES attributes_opt expression { Specification.Requires ($1,$3,$4) }
+  | free_opt MODIFIES attributes_opt identifiers { Specification.Modifies ($1,$3,$4) }
+  | free_opt ENSURES attributes_opt expression { Specification.Ensures ($1,$3,$4) }
+  ; 
 
 free_opt: { false } | FREE { true } ;
 unique_opt: { false } | UNIQUE { true } ;

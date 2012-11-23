@@ -190,6 +190,28 @@ let delay_bounding rounds delays pgm =
     (* << Program.add_inline_attribute *)
       (* ~ignore_attrs: ["leavealone"; "entrypoint"] *)
       
+    (* In case we have introduced vectorized expressions in requires clauses,
+     * we must make them refer to the initial round-index variable, rather than
+     * the returned round-index variable. *)
+    << List.map (function 
+      | D.Proc (n,ax,(tx,ps,rs,sx,bd)) -> 
+        let sx' = List.map (function 
+          | Sp.Requires (fr,ax,e) -> 
+            Sp.Requires (fr, ax, begin
+              E.map (function 
+                | E.Id x when x = round_idx -> E.Id (init_round_idx)
+                | e -> e ) e
+            end)
+          | s -> s ) sx in
+        D.Proc (n, ax, (tx, ps, rs, sx', bd))
+      | d -> d )
+      
+    (* For procedures without bodies, add an ensures clause which says the
+     * value of the round-index variable is invariant. *)
+    << List.map (function
+      | D.Proc (n,ax,(tx,ps,rs,sx,None)) when List.mem (round_idx,T.Int) rs ->
+        D.Proc (n,ax,(tx,ps,rs,sx@[Sp.ensures (round_idx $=$ init_round_idx)],None))
+      | d -> d )
     
     << Program.translate
       ~new_local_decls:
