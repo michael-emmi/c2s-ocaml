@@ -226,7 +226,7 @@ end = struct
   include Procedure
   
   (* Variables modified by a procedure. *)
-  let mods (_,ps,rs,_,bd) =
+  let mods (_,ps,rs,sx,bd) =
     Option.reduce 
       (fun (ds,ss) -> 
     		(flip List.minus) (List.map fst ps)
@@ -243,7 +243,10 @@ end = struct
       ( fun ms p -> List.union ms (mods p) )
       ( mods p ) << snd ) [] bd
     in tx, ps, rs, 
-       sx @ (List.reduce (fun ms -> [Specification.modifies ms]) [] ms), 
+       List.filter (function Specification.Modifies _ -> false | _ -> true) sx 
+       @ (List.reduce (fun ms -> [
+         Specification.modifies ~attrs:[Attribute.unit "inferred"] ms
+       ]) [] ms), 
        bd
 
   (* Declarations for variables introduced because of 

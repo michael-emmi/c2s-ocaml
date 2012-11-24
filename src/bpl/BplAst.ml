@@ -188,6 +188,8 @@ end = struct
 			let a, es = List.map_fold_left (map_fold fn) a es in
 			a, FnApp (f,es)
 		| Q (q,xs,tx,ax,ts,e) -> 
+      let a, ax = List.map_fold_left (Attribute.map_fold_exprs fn) a ax in
+      let a, ts = List.map_fold_left (Trigger.map_fold_exprs fn) a ts in
 			let a, e = map_fold fn a e in
 			a, Q (q,xs,tx,ax,ts,e)
 		| _ -> a, e		
@@ -264,10 +266,12 @@ and Attribute : sig
 	val has : string -> t list -> bool
 	val get : string -> t list -> ((Expression.t, string) either) list
 	val strip : string -> t list -> t list
-	val to_string : t -> string
 
+  val map_fold_exprs : ('a -> Expression.t -> 'a * Expression.t) -> 'a -> t -> 'a * t
+  
 	val print : t -> PrettyPrinting.doc
 	val print_seq : t list -> PrettyPrinting.doc
+	val to_string : t -> string
 end = struct
 	type t = Identifier.t * ((Expression.t, string) either) list
 	let unit id = id, []
@@ -280,6 +284,10 @@ end = struct
 	let get id = List.assoc id
 	let add (id,vs) ax = if not (has id ax) then List.cons (id,vs) ax else ax
 	let strip id = List.filter ((<>) id << fst)
+  
+  let map_fold_exprs fn = 
+    Tup2.map_fold (curry id) 
+      (List.map_fold_left (Either.map_fold (Expression.map_fold fn) (curry id))) 
 
 	open PrettyPrinting
 	let print (id,ax) =
@@ -296,13 +304,13 @@ end
 
 and Trigger : sig
 	type t = Expression.t list
-
+  val map_fold_exprs : ('a -> Expression.t -> 'a * Expression.t) -> 'a -> t -> 'a * t
 	val print : t -> PrettyPrinting.doc
 	val print_seq : t list -> PrettyPrinting.doc
 	val to_string : t -> string
 end = struct
 	type t = Expression.t list
-
+  let map_fold_exprs fn = List.map_fold_left (Expression.map_fold fn)
 	open PrettyPrinting
 	let print =
 		braces << sep << punctuate comma << List.map Expression.print
@@ -646,7 +654,12 @@ module Specification = struct
 		| Modifies (f,ax,e) ->
 			  ( if f then keyword "free" else empty )
 			  <+> keyword "modifies"
-        <+> Attribute.print_seq ax
+
+        (* Note: currently Boogie does not allow annotations on the mod set,
+         * though technically this is allowed in its specification. *)
+
+        (* <+> Attribute.print_seq ax *)
+
         <+> Identifier.print_seq e
 			  <-> semi
 		| Ensures (f,ax,e) ->

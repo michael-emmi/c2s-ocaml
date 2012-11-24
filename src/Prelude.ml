@@ -366,6 +366,10 @@ module Either = struct
 	let fold f g a = function
 		| Left x -> f a x
 		| Right y -> g a y
+    
+  let map_fold f g a = function
+    | Left x -> let a, x = f a x in a, Left x
+    | Right y -> let a, y = g a y in a, Right y
 
 	let reduce f g = fold (const f) (const g) ()
 
