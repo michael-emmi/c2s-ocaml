@@ -14,13 +14,16 @@ let stage_id = "A2S"
 
 let is_main (_,n,_) = n = "Main"
 
+let loattr = "leavealone"
+let nyattr = "noyields"
+
 (** An encoding of the depth-first task-scheduling order, a restriction of 
  * the unordered (i.e., "bag") semantics.*)
 let delay_bounding rounds delays pgm =
 	
 	let gs = List.map D.name 
     << List.filter (not << A.has "leavealone" << D.attrs)
-		<< List.filter ((=) "var" << D.kind) 
+		<< List.filter ((=) D.V << D.kind) 
 		<| Program.decls pgm in
 	
 	let vectorize_var_decl = function
@@ -54,7 +57,7 @@ let delay_bounding rounds delays pgm =
 
 	let gs_decls = 
 		List.map vectorize_var_decl
-    << List.filter ((=) "var" << D.kind &&&& (not << D.has "leavealone"))
+    << List.filter ((=) D.V << D.kind &&&& (not << D.has loattr))
 		<| Program.decls pgm in
 	
 	let next_decls = List.map (D.rename next) gs_decls
@@ -67,18 +70,23 @@ let delay_bounding rounds delays pgm =
 	and next_gs = List.map next gs
 	and guess_gs = List.map guess gs
 	in
-	
-	(* let global_access e gs =  *)
-		
+
+  let ignore_procs = 
+    List.map D.name
+    << List.filter (fun p -> not (Program.is_defined pgm (D.name p)) || D.has loattr p)
+    <| Program.procs pgm
+  in
+  
+  let is_boogie_ident s = Str.string_match (Str.regexp "boogie_si_record_.*") s 0 in
     
   let init_predicate_stmts = 
     (E.ident delays_var |:=| E.num 0)
     @ ( if add_debug_info then [ 
           Ls.call "boogie_si_record_int"
-            ~attrs:[A.unit "leavealone"]
+            ~attrs:[A.unit loattr]
             ~params:[E.ident rounds_const] ;
           Ls.call "boogie_si_record_int"
-            ~attrs:[A.unit "leavealone"]
+            ~attrs:[A.unit loattr]
             ~params:[E.ident delays_const]
         ] else [] )    
     @ List.map (fun g -> Ls.assume (g $=$ init g)) gs
@@ -138,7 +146,10 @@ let delay_bounding rounds delays pgm =
       [ ls, S.Call (ax,n,ps@[E.num 0],rs) ]
 
 		| ls, S.Call (ax,n,ps,rs) when not (A.has "async" ax) ->      
-			[ ls, S.Call (ax,n,ps@[E.ident round_idx],rs@[round_idx]) ]
+			[ ls, S.Call (ax, n, 
+        ps@[E.ident round_idx],
+        if A.has nyattr ax then rs else rs@[round_idx]
+      )]
 
 		| _ -> [s]
     
@@ -194,7 +205,7 @@ let delay_bounding rounds delays pgm =
      * we must make them refer to the initial round-index variable, rather than
      * the returned round-index variable. *)
     << List.map (function 
-      | D.Proc (n,ax,(tx,ps,rs,sx,bd)) -> 
+      | D.Proc (ax,n,(tx,ps,rs,sx,bd)) when not (A.has nyattr ax) -> 
         let sx' = List.map (function 
           | Sp.Requires (fr,ax,e) -> 
             Sp.Requires (fr, ax, begin
@@ -203,14 +214,14 @@ let delay_bounding rounds delays pgm =
                 | e -> e ) e
             end)
           | s -> s ) sx in
-        D.Proc (n, ax, (tx, ps, rs, sx', bd))
+        D.Proc (ax, n, (tx, ps, rs, sx', bd))
       | d -> d )
       
     (* For procedures without bodies, add an ensures clause which says the
      * value of the round-index variable is invariant. *)
     << List.map (function
-      | D.Proc (n,ax,(tx,ps,rs,sx,None)) when List.mem (round_idx,T.Int) rs ->
-        D.Proc (n,ax,(tx,ps,rs,sx@[Sp.ensures (round_idx $=$ init_round_idx)],None))
+      | D.Proc (ax,n,(tx,ps,rs,sx,None)) when List.mem (round_idx,T.Int) rs ->
+        D.Proc (ax,n,(tx,ps,rs,sx@[Sp.ensures (round_idx $=$ init_round_idx)],None))
       | d -> d )
     
     << Program.translate
@@ -228,9 +239,10 @@ let delay_bounding rounds delays pgm =
        synchronous calls. 
        ToDo: separate the Seq-framework part. *)
 		<< Program.translate
-      ~ignore_attrs: ["leavealone"]
+      ~ignore_attrs: [loattr]
 			~new_global_decls: ( init_decls @ next_decls @ new_decls )		
-			~new_proc_params: (const [init_round_idx, T.Int])								
+			~new_proc_params: 
+        (fun (ax,n,_) -> if A.has nyattr ax then [round_idx, T.Int] else [init_round_idx, T.Int])
 			~per_stmt_map: (const translate_post)	
       
     (* Add extra declarations for procedures which make async calls. *)
@@ -243,24 +255,42 @@ let delay_bounding rounds delays pgm =
 
     (* Yield elimination / vectorization step. *)
 		<< Program.translate
-      ~ignore_attrs: ["leavealone"]
+      ~ignore_attrs: [loattr]
 			~replace_global_decls: (fun d -> vectorize_var_decl d :: [])
       ~new_global_decls: ( [D.var ignore_round_idx T.Int] )
-      ~new_local_decls: (fun pc -> if is_main pc then [D.var round_idx T.Int] else [])
-			~new_proc_rets: (fun pc -> if is_main pc then [] else [round_idx, T.Int])
+      ~new_local_decls: 
+        (fun (ax,n,_) -> if n = "Main" then [D.var round_idx T.Int] else [])
+			~new_proc_rets: 
+        (fun (ax,n,_) -> if n = "Main" or A.has nyattr ax then [] else [round_idx, T.Int])
 			~proc_body_prefix: 
         (const 
             ( (round_idx $:=$ init_round_idx)
             @ ( if add_debug_info
                 then [ Ls.call "boogie_si_record_int" 
-                  ~attrs:[A.unit "leavealone"]
+                  ~attrs:[A.unit loattr]
                   ~params:[E.ident init_round_idx] ]
                 else [] )))
 			~per_stmt_map: (const (translate_call <=< translate_yield))
 			~per_expr_map: (const vectorize_expr)
       
+    (* Prevent bodiless procedures from possibly yielding. *)
     << Program.translate
-
+      ~replace_global_decls:
+        ( fun d -> match d with
+          | D.Proc (ax,n,p) when is_boogie_ident n ->
+            [ D.Proc (A.add (A.unit loattr) ax,n,p) ]
+          | D.Proc (ax,n,p) when List.mem n ignore_procs ->
+            [ D.Proc (A.add (A.unit nyattr) ax,n,p) ]
+          | _ -> [d]
+        )        
+      ~per_stmt_map:
+        ( fun _ s -> match s with
+          | ls, S.Call (ax,n,ps,rs) when is_boogie_ident n ->
+            [ ls, S.Call (A.add (A.unit loattr) ax,n,ps,rs)]
+          | ls, S.Call (ax,n,ps,rs) when List.mem n ignore_procs ->
+            [ ls, S.Call (A.add (A.unit nyattr) ax,n,ps,rs)]
+          | _ -> [s]
+        )
 	)
 	<| pgm
 	

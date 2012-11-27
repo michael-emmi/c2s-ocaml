@@ -284,6 +284,9 @@ and ProgramExt : sig
   val find_proc : t -> Identifier.t -> Procedure.t list
   val map_exprs : (Declaration.t -> Expression.t -> Expression.t) -> t -> t
   val map_stmts : (Declaration.t -> LabeledStatement.t -> LabeledStatement.t list) -> t -> t
+
+  val is_declared : t -> string -> bool
+  val is_defined : t -> string -> bool
   
   val add_inline_attribute : ?ignore_attrs: string list -> t -> t
   
@@ -353,6 +356,15 @@ end = struct
 			| D.Impl (ax,n,p) -> D.Impl (ax,n,Procedure.map_exprs (fn d) p)
 			| d -> d
 		)     
+    
+  let is_declared pgm = ((!=) []) << find pgm
+  let is_defined pgm = 
+    List.exists (function 
+    | D.Func (_,_,_,_,_,Some _)
+    | D.Proc (_,_,(_,_,_,_,Some _))
+    | D.Impl _ -> true
+    | _ -> false
+    ) << find pgm
 
 	let translate
     ?ignore_attrs

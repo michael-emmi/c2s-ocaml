@@ -14,7 +14,7 @@ let stage_id = "FiFoSeq"
 let use_simple_translation = true
 
 let assumptions pgm =
-  if not (Program.exists (fun d -> D.name d = "pid" && D.kind d = "type") pgm)
+  if not (Program.exists (fun d -> D.name d = "pid" && D.kind d = D.T) pgm)
     then failwith "FiFo sequentialization expects `pid' type declaration.";
 
   if not (Program.forall (

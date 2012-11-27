@@ -63,3 +63,15 @@ let seq_framework  =
         Ls.add_labels ls (E.ident err_flag |:=| (E.ident err_flag ||| (E.negate e)))
       | _ -> [s] 
     )
+
+  << Program.translate
+    ~per_stmt_map: 
+      ( const <| function
+        | ls, S.Call (ax,n,ps,rs) when n = "__SMACK_record_int" ->
+          [ ls, S.Call (ax,"boogie_si_record_int",ps,rs)]
+        | ls, S.Call (ax,n,ps,rs) when n = "__SMACK_record_obj" ->
+          [ ls, S.Call (ax,"boogie_si_record_ref",ps,rs)]
+        | ls, S.Call (ax,n,ps,rs) when n = "__SMACK_record_ptr" ->
+          [ ls, S.Call (ax,"boogie_si_record_ptr",ps,rs)]
+        | s -> [s]
+      )

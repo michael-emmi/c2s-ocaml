@@ -769,6 +769,8 @@ and Declaration : sig
 		| Impl of Attribute.t list
 			  * Identifier.t 
 			  * Procedure.t
+        
+  type kind =  T | A | C | F | V | P | I
 			
   val type_ : ?attrs:Attribute.t list -> ?ctor_args:Identifier.t list -> 
     Identifier.t -> t    
@@ -791,7 +793,7 @@ and Declaration : sig
   val has : string -> t -> bool
 	val name : t -> Identifier.t
 	val rename : (Identifier.t -> Identifier.t) -> t -> t
-	val kind : t -> string
+	val kind : t -> kind
 	val to_const : t -> t
   
 	val to_string : t -> string
@@ -823,7 +825,9 @@ end = struct
 			  * Procedure.t
 		| Impl of Attribute.t list
 			  * Identifier.t 
-			  * Procedure.t 
+			  * Procedure.t
+        
+  type kind =  T | A | C | F | V | P | I
 			
   let type_ ?attrs:ax ?ctor_args:cs t = TypeCtor (Option.list ax, false, t, Option.list cs)
   let var ?attrs:ax ?where_clause:wc s t = Var (Option.list ax,s,t,wc)
@@ -863,13 +867,13 @@ end = struct
 		| d -> d
 		
 	let kind = function
-		| TypeCtor _ | TypeSyn _ -> "type"
-		| Axiom _ -> "axiom"
-		| Const _ -> "const"
-		| Func _ -> "function"
-		| Var _ -> "var"
-		| Proc _ -> "procedure"
-		| Impl _ -> "implementation"
+		| TypeCtor _ | TypeSyn _ -> T
+		| Axiom _ -> A
+		| Const _ -> C
+		| Func _ -> F
+		| Var _ -> V
+		| Proc _ -> P
+		| Impl _ -> I
 		
 	let to_const = function
 		| Var (ax,n,t,e) ->
@@ -964,12 +968,13 @@ module Program : sig
 end = struct
 	module Ls = LabeledStatement
 	module S = Specification
+  module D = Declaration
 
-	type t = Declaration.t list
+	type t = D.t list
 	
 	let decls = id
-  let global_vars = List.filter (fun d -> Declaration.kind d = "var")
-  let procs = List.filter (fun d -> Declaration.kind d = "proc")
+  let global_vars = List.filter (fun d -> D.kind d = D.V)
+  let procs = List.filter (fun d -> D.kind d = D.P)
 
 	let map_fold fn a ds = List.map_fold_left fn a ds
 	let map_fold_procs fn a =
