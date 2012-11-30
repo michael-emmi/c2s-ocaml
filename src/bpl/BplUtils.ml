@@ -233,15 +233,23 @@ end = struct
     		<< (flip List.minus) (List.map fst rs)
     		<< (flip List.minus) (List.map Declaration.name ds)
         <| LabeledStatementExt.modifies ss )
-      [] bd 
+      ( List.flatten 
+        << List.map (function Specification.Modifies (_,_,ms) -> ms | _ -> []) 
+        <| sx ) 
+      bd 
     
   (* Recalculate the modifies clause based on global variables 
      which are	actually (recursively) modified in a procedure. *)  
   let fix_modifies pgm ((tx,ps,rs,sx,bd) as p) =
-    let ms = Option.reduce (
-      ProgramExt.fold_over_calls pgm 
-      ( fun ms p -> List.union ms (mods p) )
-      ( mods p ) << snd ) [] bd
+    let ms = 
+      let mps = mods p in
+      Option.reduce
+        ( ProgramExt.fold_over_calls pgm 
+          ( fun ms p -> List.union ms (mods p) )
+          mps
+          << snd ) 
+        mps
+        bd
     in tx, ps, rs, 
        List.filter (function Specification.Modifies _ -> false | _ -> true) sx 
        @ (List.reduce (fun ms -> [

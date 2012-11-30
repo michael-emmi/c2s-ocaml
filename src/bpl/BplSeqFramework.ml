@@ -36,7 +36,18 @@ let inline_procs =
       
 let boogie_si_mode = true
         
-let seq_framework  =   
+let seq_framework pgm = 
+  
+  let is_init_axiom = 
+    function D.Axiom (ax,_) when A.has "init" ax -> true | _ -> false 
+  in
+
+  let init_axioms = 
+    List.flatten 
+    << List.map (function D.Axiom (ax,e) when A.has "init" ax -> [e] | _ -> [])
+    <| pgm 
+  in
+
   Program.translate
     ~new_global_decls: [ 
       D.Var ([A.unit "leavealone"],err_flag,T.Bool,None) ;
@@ -56,6 +67,12 @@ let seq_framework  =
           @ [ Ls.return () ]
         )
     ]
+    
+    ~proc_body_prefix: (fun (_,n,_) -> 
+      if n = main_proc_name 
+      then List.map Ls.assume init_axioms
+      else []
+    )
       
     ~per_stmt_map: (fun n s -> 
       match s with
@@ -75,3 +92,5 @@ let seq_framework  =
           [ ls, S.Call (ax,"boogie_si_record_ptr",ps,rs)]
         | s -> [s]
       )
+  << List.filter (not << is_init_axiom)
+  <| pgm

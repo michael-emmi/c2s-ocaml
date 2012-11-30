@@ -119,6 +119,8 @@ module rec Expression : sig
 	val map : (t -> t) -> t -> t
 	val fold : ('a -> t -> 'a) -> 'a -> t -> 'a
 	val map_fold : ('a -> t -> 'a * t) -> 'a -> t -> 'a * t
+  
+  val contains : (t -> bool) -> t -> bool
 
 	val to_string : t -> string
 	val print : t -> PrettyPrinting.doc
@@ -196,6 +198,8 @@ end = struct
 		
 	let map fn = map_fold_to_map map_fold fn
 	let fold fn = map_fold_to_fold map_fold fn
+  
+  let contains fn = fold (fun b e -> b || fn e) false
   
   let size = fold (fun s _ -> s + 1) 0
 		

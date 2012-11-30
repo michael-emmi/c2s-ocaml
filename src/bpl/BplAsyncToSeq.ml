@@ -198,6 +198,17 @@ let delay_bounding rounds delays pgm =
 	else
 		id
     
+    (* In the case we have introduced vectorized expressions in axioms,
+     * we must quantify the vector variable. 
+     * NOTE: This should never actually be the case, since we should not be
+     * allowed to mention global variables inside of axioms. *)
+     (* << List.map (function
+       | D.Axiom (ax,e) 
+         when E.contains (function E.Id x when x = round_idx -> true | _ -> false) e ->
+           D.Axiom (ax, E.forall [round_idx, T.Int] e)
+       | d -> d
+       ) *)
+    
     (* << Program.add_inline_attribute *)
       (* ~ignore_attrs: ["leavealone"; "entrypoint"] *)
       
