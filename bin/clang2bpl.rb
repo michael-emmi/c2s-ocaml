@@ -17,7 +17,9 @@ $smacklib="#{$smackhome}/Debug+Asserts/lib/smack.dylib"
 $smackopts = [
   "-load #{$smacklib}",
   "-internalize", "-mem2reg", "-die", "-lowerswitch",
-  "-bpl_print", "-debug-only=bpl",
+  "-bpl_print", 
+  # "-debug-only=bpl", 
+  # "-debug",
   "-disable-output",
   # "-raiseallocs", 
   # "-generate_lines",
@@ -180,7 +182,7 @@ csources.each do |src|
   base = File.basename(src,File.extname(src))
   llvmbcs << bc = "#{base}.bc"
   puts "* Clang: #{src} => #{bc}"
-  if not system("#{$clang} -c #{src} -emit-llvm -o #{bc} #{rest * " "}") then
+  if not system("#{$clang} #{rest * " "} -c #{src} -emit-llvm -o #{bc}") then
     err "failed to compile #{src}."
     exit -1
   end  
@@ -194,8 +196,6 @@ if not system("#{$llink} -o #{bc} #{llvmbcs * " "}") then
   exit -1
 end
 
-# puts " #{"-"*78} "  
-
 # SMACK it together
 puts "* SMACK: #{bc} => #{bpl}"
 if File.exists?($smackprelude) then
@@ -203,7 +203,7 @@ if File.exists?($smackprelude) then
 else
   warn "cannot locate SMACK's prelude file (at `#{$smackprelude}')."
 end
-# if not system("#{$smack} #{$smackopts * " "} #{bc} | #{$smackfilter} >> #{bpl}") then
+
 if not system("#{$smack} #{$smackopts * " "} #{bc} >> #{bpl}") then
   err "failed to translate bytecode to Boogie."
   exit -1

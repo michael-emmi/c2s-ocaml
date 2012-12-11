@@ -16,7 +16,7 @@ TRACE_SIG = /\(\d+,\d+\):/
 TRACE_START = /Execution trace:/
 BOOGIE_END = /Boogie program verifier finished/
 
-IDENT = /[A-Za-z0-9_][A-Za-z0-9.$_-]*/
+IDENT = /[A-Za-z0-9$_][A-Za-z0-9.$_-]*/
 BOOLVAL = /(false|true)/
 NUMVAL = /(-?\d+)/
 SEPVAL = /T@sep!val!\d+/
