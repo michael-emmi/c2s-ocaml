@@ -2,8 +2,7 @@ module C2S
   
   BOOGIE = "Boogie"
   
-  private
-  def C2S.uniquify(f)
+  def self.uniquify(f)
     if true then return f end
     ext = File.extname(f)
     base = File.basename(f,ext)    
@@ -14,9 +13,9 @@ module C2S
     end
     return f
   end
+  private_class_method :uniquify
   
-  private
-  def C2S.clang_frontend( clangsources, clangflags = [], bplsources = [], cleanup = true )      
+  def self.clang_frontend( clangsources, clangflags = [], bplsources = [], cleanup = true )      
     
     raise "Don't know how to handle both Clang and Boogie sources at the same time." \
       unless clangsources.empty? or bplsources.empty?
@@ -39,29 +38,29 @@ module C2S
     return src
   end
   
-  def C2S.delaybounding( src, rounds, delays )
+  def self.delaybounding( src, rounds, delays )
     puts "Sequentializing #{src} with #{delays}-delay translation.".underline
     puts "* Rounds: #{rounds}"
     puts "* Delays: #{delays}"
     
     seq = "#{File.basename(src,'.bpl')}.EQR.#{rounds}.#{delays}.bpl"
     puts "* c2s: #{src} => #{seq}"
-    C2S.sequentialize( src, "--delay-bounding #{rounds} #{delays}", seq )
+    sequentialize( src, "--delay-bounding #{rounds} #{delays}", seq )
   end
   
-  def C2S.phasebounding( src, phases, delays, mutli = false )
+  def self.phasebounding( src, phases, delays, mutli = false )
     puts "Sequentializing #{src} with #{phases}-phase translation."
     puts "-- Phases: #{phases}"
     puts "-- Delays: #{delays}"
   
     seq = "#{File.basename(src,'.bpl')}.FiFoSeq.#{phases}.#{delays}.bpl"
     puts "* c2s: #{src} => #{seq}"
-    C2S.sequentialize( src, "--phase-bounding #{rounds} #{delays}", seq )
+    sequentialize( src, "--phase-bounding #{rounds} #{delays}", seq )
     
     # TODO : pass --mutli-to-single if multi = true
   end
   
-  def C2S.sequentialize( src, mode, seq )
+  def self.sequentialize( src, mode, seq )
     cmd = [
       C2S, src,
       "--seq-framework",
@@ -85,8 +84,9 @@ module C2S
     puts " #{"-" * 78} "
     return seq
   end
+  private_class_method :sequentialize
 
-  def C2S.verify( src, args, cleanup = true, doGraph = false )  
+  def self.verify( src, args, cleanup = true, doGraph = false )  
     puts "Verifying #{src} with Boogie/Corral...".underline
     puts "* /stratifiedInline:2"
     puts "* /extractLoops"
