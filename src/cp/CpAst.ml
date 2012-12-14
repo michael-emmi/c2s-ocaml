@@ -970,35 +970,35 @@ module Program = struct
 		<< map_decls fd *)
 		
 	(* ToDo: make the suffix happen before return statements? *)
-	let translate
-		?(rem_global_decls = [])
-		?(map_global_decls = List.unit)
-		?(rename_global_decls = id)
-		?(add_global_decls = [])
-		?(add_proc_params = const [])
-		?(add_local_decls = const [])
-		?(add_proc_rets = const [])
-		?(proc_body_prefix = const [])
-		?(proc_body_suffix = const [])
-		?(per_stmt_map = fun i -> List.unit)
-		?(per_expr_map = fun i -> id) =
+  let translate
+    ?(rem_global_decls = [])
+    ?(map_global_decls = List.unit)
+    ?(rename_global_decls = id)
+    ?(add_global_decls = [])
+    ?(add_proc_params = const [])
+    ?(add_local_decls = const [])
+    ?(add_proc_rets = const [])
+    ?(proc_body_prefix = const [])
+    ?(proc_body_suffix = const [])
+    ?(per_stmt_map = fun i -> List.unit)
+    ?(per_expr_map = fun i -> id) =
 
-		add_decls add_global_decls
-		<< map_decls (fun d ->
-			match d with
-			| D.Proc (ax,n,((ps,ts,rs,es,ds,ss) as p)) -> 
-				let ps' = ps @ add_proc_params (n,p)
-				and ts' = ts @ add_proc_rets (n,p)
-				and ds' = ds @ add_local_decls (n,p)
-				and ss' = proc_body_prefix (n,p) @ ss @ proc_body_suffix (n,p)
-				in D.Proc (ax,n,(ps',ts',rs,es,ds',ss')) :: [] 
-			| d -> d :: [])
-		<< List.map (fun d -> Declaration.map_lvals (Lv.lift << per_expr_map <| D.name d) d)
-		<< List.map (fun d -> Declaration.map_exprs (per_expr_map <| D.name d) d)
-		<< List.map (fun d -> Declaration.map_stmts (per_stmt_map <| D.name d) d)
-		<< map_decls map_global_decls
-		<< map_decls (List.unit << Declaration.rename rename_global_decls)
-		<< rem_decls rem_global_decls
+    add_decls add_global_decls
+    << map_decls (fun d ->
+      match d with
+      | D.Proc (ax,n,((ps,ts,rs,es,ds,ss) as p)) -> 
+        let ps' = ps @ add_proc_params (n,p)
+        and ts' = ts @ add_proc_rets (n,p)
+        and ds' = ds @ add_local_decls (n,p)
+        and ss' = proc_body_prefix (n,p) @ ss @ proc_body_suffix (n,p)
+        in D.Proc (ax,n,(ps',ts',rs,es,ds',ss')) :: [] 
+      | d -> d :: [])
+    << List.map (fun d -> Declaration.map_lvals (Lv.lift << per_expr_map <| D.name d) d)
+    << List.map (fun d -> Declaration.map_exprs (per_expr_map <| D.name d) d)
+    << List.map (fun d -> Declaration.map_stmts (per_stmt_map <| D.name d) d)
+    << map_decls map_global_decls
+    << map_decls (List.unit << Declaration.rename rename_global_decls)
+    << rem_decls rem_global_decls
 		
 
 	open PrettyPrinting

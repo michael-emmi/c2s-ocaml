@@ -121,6 +121,7 @@ module rec Expression : sig
 	val map_fold : ('a -> t -> 'a * t) -> 'a -> t -> 'a * t
   
   val contains : (t -> bool) -> t -> bool
+  val size : t -> int
 
 	val to_string : t -> string
 	val print : t -> PrettyPrinting.doc
@@ -218,14 +219,23 @@ end = struct
 			  print e
 			  <-> brackets ( print_seq es <+> oper ":=" <+> print f )
 		| Q (q,tx,xs,ax,ts,e) ->
-			  parens (
-				  keyword (match q with Forall -> "forall" | _ -> "exists")
-				  <+> Type.print_type_args tx
-				  <+> Type.print_typed_ids xs
-				  <+> oper "::"
-				  <+> Attribute.print_seq ax
-				  <+> Trigger.print_seq ts
-				  <+> print e )
+      let head = 
+        keyword (match q with Forall -> "forall" | _ -> "exists")
+			  <+> Type.print_type_args tx
+			  <+> Type.print_typed_ids xs
+			  <+> oper "::"
+      and meta =
+			  Attribute.print_seq ax
+			  <+> Trigger.print_seq ts
+      in
+      parens (
+        (* ToDo: should better be a function of the *printed* size. *)
+        if size e + List.length ax + List.length ts < 8
+          then head <+> meta <+> print e
+          else if List.length ax + List.length ts = 0 
+          then indent indent_size (head $+$ meta $+$ print e)
+          else head $+$ indent indent_size (meta $+$ print e)
+      )
 
 	and print_auto_parens e = if is_term e then print e else parens (print e)
 	and print_seq es = sep << punctuate comma << List.map print <| es
@@ -253,7 +263,7 @@ end = struct
         (String.concat "," <| List.map to_string es) (to_string f)
     | Q _ as e -> render <| print e    
         
-  let print e = if size e > 10 then text (to_string e) else print e
+  (* let print e = if size e > 10 then text (to_string e) else print e *)
 	let print_seq es = sep << punctuate comma << List.map print <| es
 	let to_string = render << print
 end
@@ -297,7 +307,7 @@ end = struct
 	let print (id,ax) =
 		braces (
 			colon <-> text id
-		    <+> ( sep 
+		    <+> ( sep << punctuate comma
 				  << List.map (Either.reduce
 								   Expression.print
 								   text)
@@ -560,6 +570,7 @@ and LabeledStatement : sig
     ?params:Expression.t list -> ?returns:Identifier.t list -> 
     Identifier.t -> t
   val return : ?labels:Identifier.t list -> unit -> t
+  val goto : ?labels:Identifier.t list -> Identifier.t list -> t
 
 	val map_fold_stmts : ('a -> t -> 'a * t list) -> 'a -> t list -> 'a * t list
 	val map_fold_exprs : ('a -> Expression.t -> 'a * Expression.t) -> 'a -> t -> 'a * t
@@ -591,6 +602,7 @@ end = struct
 	let call ?labels:ls ?attrs:ax ?params:ps ?returns:xs p = 
     Option.list ls, Statement.Call (Option.list ax,p,Option.list ps,Option.list xs)
 	let return ?labels:ls () = Option.list ls, Statement.Return
+  let goto ?labels:ls xs = Option.list ls, Statement.Goto xs
 
 	let rec map_fold_stmts fn a ss =
 		Tup2.map id List.flatten 
@@ -927,8 +939,12 @@ end = struct
 				  <+> parens (print_function_arg r)
 			  in begin match e with
 			  | None -> fsig <-> semi
-			  | Some e -> fsig $+$ (indent indent_size <<  braces)
-					(Expression.print e)
+        | Some e when Expression.size e < 4 -> 
+          fsig <+> braces (Expression.print e)
+			  | Some e -> fsig 
+          $+$ lbrace 
+          $+$ (indent indent_size <| Expression.print e)
+          $+$ rbrace					
 			  end
 
 		| Axiom (ax,e) -> 

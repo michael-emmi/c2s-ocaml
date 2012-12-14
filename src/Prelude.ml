@@ -155,6 +155,13 @@ module List = struct
   let add_uniq x xs =
     if List.mem x xs then xs else x::xs
 
+  let rec insert y i xs = 
+    if i < 0 then xs
+    else if i == 0 then y :: xs
+    else match xs with
+    | x::xs -> x :: insert y (i-1) xs
+    | [] -> y :: []
+
   let remove x =
     List.filter ((=) 0 << Pervasives.compare x)
 
@@ -190,6 +197,7 @@ module List = struct
 	  | x::xs -> x::(List.map f xs)
 	  | [] -> []
 	  
+  (** A list of integers from [i] to [j]. *)
   let rec range i j = if i > j then [] else i :: range (i+1) j
 
   let make f i =
@@ -246,6 +254,18 @@ module List = struct
 		(flip <| fun y -> cons << List.map (Tup2.ekam y) <| xs)
       []
       ys
+      
+  let words n xs = 
+    List.fold_left (fun words _ -> 
+      List.flatten 
+      << List.flatten
+      << List.map (fun word -> 
+        let k = List.length word in
+        List.map (fun x -> 
+          List.map (fun i -> insert x i word) (range 0 k)
+        ) xs
+      ) <| words
+    ) [[]] (range 1 n)
 
   let separate f = function
     | [] -> [ [] ]

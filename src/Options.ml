@@ -350,7 +350,7 @@ let parse_cmdline _ =
 	if Array.length Sys.argv < 2
 	or not (Str.string_match filename_re (Sys.argv.(1)) 0) 
 	then begin
-		printf "Must specify a source file.\n";
+		printf "Must specify a source file, as the first argument.\n";
 		output_string stdout << render <| usage_message ();
 		exit 0
 	end;

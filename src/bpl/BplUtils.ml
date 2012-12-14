@@ -22,6 +22,10 @@ module Expression = struct
 	include Expression
 	
 	let sel e es = Sel (e,es)
+  let nested_sel e es = 
+    match es with
+    | [] -> e
+    | h::ts -> List.fold_left (fun e f -> sel e [f]) (sel e [h]) ts
   
   let ids_of e = 
     fold (fun ids e -> 
@@ -74,6 +78,7 @@ module rec LabeledStatementExt : sig
   val has_attr : Identifier.t -> t -> bool
   
   val incr : ?labels:Identifier.t list -> Expression.t -> t
+  val decr : ?labels:Identifier.t list -> Expression.t -> t
   
   val skip : ?labels:Identifier.t list -> ?attrs:Attribute.t list -> unit -> t
   val yield : ?labels:Identifier.t list -> ?attrs:Attribute.t list -> unit -> t
@@ -127,6 +132,12 @@ end = struct
       ~labels:(Option.list ls)
 			[Lvalue.from_expr e] 
 			[Expression.Bin (BinaryOp.Plus, e, Expression.num 1) ] 
+      
+	let decr ?labels:ls e = 
+		assign 
+      ~labels:(Option.list ls)
+			[Lvalue.from_expr e] 
+			[Expression.Bin (BinaryOp.Minus, e, Expression.num 1) ] 
 
 	let modifies =
 		fold_stmts
@@ -306,6 +317,7 @@ and ProgramExt : sig
     ?new_proc_rets: (proc_ctx -> (Identifier.t * Type.t) list) ->
     ?new_local_decls: (proc_ctx -> Declaration.t list) ->
     ?proc_body_prefix: (proc_ctx -> LabeledStatement.t list) ->
+    ?proc_before_ret: (proc_ctx -> LabeledStatement.t list) ->
     ?proc_body_suffix: (proc_ctx -> LabeledStatement.t list) ->
     ?per_stmt_map: (proc_ctx -> LabeledStatement.t -> LabeledStatement.t list) ->
     ?per_expr_map: (Declaration.t -> Expression.t -> Expression.t) ->
@@ -382,6 +394,7 @@ end = struct
 		?(new_proc_rets = const [])
 		?(new_local_decls = const [])
 		?(proc_body_prefix = const [])
+    ?(proc_before_ret = const [])
 		?(proc_body_suffix = const [])
 		?(per_stmt_map = const List.unit)
 		?(per_expr_map = const id) =
@@ -404,10 +417,11 @@ end = struct
           (* Add the suffix just before each return statement.
             Note: we assume each procedure ends with a return. *)
           List.append (proc_body_prefix (ax,n,p))
+          << (flip List.append) (proc_body_suffix (ax,n,p))
           << snd << LabeledStatement.map_fold_stmts
             ( fun () s -> 
               match s with
-              | ls, Statement.Return -> (), proc_body_suffix (ax,n,p) @ [s]
+              | ls, Statement.Return -> (), proc_before_ret (ax,n,p) @ [s]
               | _ -> (), [s] )
             () <| ss 
         ) bd
@@ -500,8 +514,7 @@ module Extensions = struct
   module Declaration = DeclarationExt
   module Specification = Specification
   module Procedure = ProcedureExt
-  module Program = ProgramExt
-  
+  module Program = ProgramExt  
 end
 
 module Abbreviations = struct

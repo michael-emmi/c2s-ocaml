@@ -264,7 +264,7 @@ let phase_bounding_simple phase_bound delay_bound p =
 			~new_proc_params: (const [phase_var, T.Int])
       ~new_local_decls: (const (gvar_decls @ [ D.var vphase_var Type.Int ])) 
 			~proc_body_prefix: (const proc_begin_stmts)
-  		~proc_body_suffix: (const proc_end_stmts)
+  		~proc_before_ret: (const proc_end_stmts)
       ~per_stmt_map: (const (calls <=< delay))
       ~per_expr_map: (const id)
           

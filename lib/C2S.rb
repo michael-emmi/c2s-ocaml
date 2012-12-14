@@ -117,6 +117,7 @@ module C2S
         File.open("#{src}.trace",'w'){|f| f.write(output) }
         `boogie-trace-parser.rb #{src}.trace`
         File.delete("#{src}.trace") if cleanup
+        puts "Generated trace graph.".cyan
       else
         puts output.cyan
       end
