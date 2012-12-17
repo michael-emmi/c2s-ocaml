@@ -47,18 +47,16 @@ let instrument k p =
     (* Add [local_time] parameter to each procedure. *)
 		~new_proc_params: 
       ( function 
-        | (_,"Main",_) -> [] 
-        | _ -> [local_clock_var, T.Int]
+        | (ax,_,_) when A.has "method" ax -> [local_clock_var, T.Int]
+        | _ -> []
       )
     
     (* Make all returns jump to a unified exit point. *)
 		~per_stmt_map: 
-      ( fun (ax,n,_) -> begin
-        function
-        | ls, S.Return when A.has "method" ax ->
-          Ls.goto [ jump_label n ] :: []          
-        | ls -> ls :: []
-        end )
+      ( fun (ax,n,p) (ls,s) -> match s with
+        | S.Return when A.has "method" ax -> [Ls.goto ~labels:ls [jump_label n]]
+        | _ -> [ls,s]
+      )
 		
     (* Begin each method with [ yield; time >= local_time ] *)
 		~proc_body_prefix:
@@ -66,23 +64,27 @@ let instrument k p =
         | (ax,n,_) when A.has "method" ax ->
           [ Ls.yield () ; 
             Ls.assume (E.ident clock_var |>=| E.ident local_clock_var )
-          ]
-          
+          ]          
         | _ -> [] )
 			
     (* Suffix each method with counter increments and decrements. *)
 		~proc_body_suffix: 
       ( function 
         | (ax,n,(_,ps,rs,_,_)) when A.has "method" ax -> 
-          
-          let idxs = List.map fst ps @ List.map fst rs @ [local_clock_var]
+          let args = List.map fst ps
+          and rets = List.map fst rs
           in
           [ Ls.assign ~labels:[jump_label n]
               [Lv.ident barrier_var]
               [E.bool true];
-            Ls.decr (E.nested_sel (E.ident <| open_var n) (List.map E.ident idxs));
+            
+            (* Decrement the "open" counter, increment the "done" counter. *)
+            Ls.decr (E.nested_sel (E.ident <| open_var n) 
+                      (List.map E.ident <| args @ [local_clock_var]));
             Ls.incr (E.nested_sel (E.ident <| done_var n)
-              (List.map E.ident idxs @ [ E.ident clock_var |+| E.num 1 ]));
+                      (List.map E.ident <| args @ rets @ [clock_var]));
+                      
+            (* Call the "CheckInvariant" procedure. *)
             Ls.call check_proc ~params:(
               List.flatten << List.flatten 
               << List.map (fun (m,nargs,nrets) -> 
