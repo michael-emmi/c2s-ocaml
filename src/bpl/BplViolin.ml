@@ -82,7 +82,7 @@ let instrument k p =
             Ls.decr (E.nested_sel (E.ident <| open_var n) 
                       (List.map E.ident <| args @ [local_clock_var]));
             Ls.incr (E.nested_sel (E.ident <| done_var n)
-                      (List.map E.ident <| args @ rets @ [clock_var]));
+                      (List.map E.ident <| args @ rets @ [local_clock_var; clock_var]));
                       
             (* Call the "CheckInvariant" procedure. *)
             Ls.call check_proc ~params:(
