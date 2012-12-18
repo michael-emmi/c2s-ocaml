@@ -29,11 +29,11 @@ let instrument k p =
 		) p 
 	in
   
-  (* Take the set of constants of type "val" as the values. *)
+  (* Take the set of constants annotated with {:value} as the values. *)
   let vals =
     Option.cat
     << List.map (function 
-      | D.Const (_,_,x,T.T (t,[]),_) when t = "val" -> Some x
+      | D.Const (ax,_,x,_,_) when A.has "value" ax -> Some x
       | _ -> None )
     <| Program.decls p
   in
