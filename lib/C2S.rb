@@ -1,4 +1,6 @@
 module C2S
+
+  require 'scriptprelude'
   
   BOOGIE = "Boogie"
   
@@ -100,6 +102,10 @@ module C2S
       args, 
       "/errorLimit:1", "/errorTrace:2"
     ]
+    
+    if not args.any? {|a| a =~ /\/recursionBound:[0-9]+/} then
+      warn "without specifying a /recursionBound:_, this may not terminate!"
+    end
 
     # other interesting flags: 
     # /errorLimit:1 -- only one error (per procedure)

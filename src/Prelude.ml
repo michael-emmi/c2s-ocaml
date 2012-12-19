@@ -255,7 +255,16 @@ module List = struct
       []
       ys
       
-  let words n xs = 
+  let rec words n xs =
+    if n <= 0 then [ [] ]
+    else begin
+      let ws = words (n-1) xs in
+      List.flatten 
+      << List.map (fun w -> List.map (fun x -> w @ [x]) xs) 
+      <| ws
+    end
+      
+  (* let words n xs = 
     List.fold_left (fun words _ -> 
       List.flatten 
       << List.flatten
@@ -265,7 +274,7 @@ module List = struct
           List.map (fun i -> insert x i word) (range 0 k)
         ) xs
       ) <| words
-    ) [[]] (range 1 n)
+    ) [[]] (range 1 n) *)
 
   let separate f = function
     | [] -> [ [] ]

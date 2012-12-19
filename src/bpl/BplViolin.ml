@@ -24,7 +24,7 @@ let instrument k p =
 		Option.cat
 		<| List.map (
 			function D.Proc (ax,n,(_,ps,rs,_,_)) | D.Impl (ax,n,(_,ps,rs,_,_)) 
-			when A.has "method" ax -> Some (n, List.length ps, List.length rs)
+			when A.has "method" ax -> Some (n, ps, rs)
 			| _ -> None				
 		) p 
 	in
@@ -33,9 +33,15 @@ let instrument k p =
   let vals =
     Option.cat
     << List.map (function 
-      | D.Const (ax,_,x,_,_) when A.has "value" ax -> Some x
+      | D.Const (ax,_,x,t,_) when A.has "value" ax -> Some (x,t)
       | _ -> None )
     <| Program.decls p
+  in
+  
+  let type_checks =
+    List.for_all2 (fun (_,t) v -> 
+      try List.assoc v vals = t
+      with Not_found -> failwith "Problem with method arg type-checking!" )
   in
 	
 	if List.length methods < 1 then
@@ -87,12 +93,15 @@ let instrument k p =
             (* Call the "CheckInvariant" procedure. *)
             Ls.call check_proc ~params:(
               List.flatten << List.flatten 
-              << List.map (fun (m,nargs,nrets) -> 
+              << List.map (fun (m,args,rets) -> 
                 (List.map (fun vs -> 
                   List.map (fun i -> 
                     E.nested_sel (E.ident <| open_var m) (vs@[E.num i])
                   ) <| List.range 0 k
-                ) <| (List.words (nargs) <| List.map E.ident vals))
+                ) << List.map (List.map E.ident)
+                  << List.filter (type_checks args)
+                  << List.words (List.length args) 
+                  <| List.map fst vals)
 
                 @ (List.flatten << List.map (fun vs -> 
                   List.map (fun i -> 
@@ -100,7 +109,10 @@ let instrument k p =
                       E.nested_sel (E.ident <| done_var m) (vs@[E.num i; E.num j])
                     ) <| List.range i k
                   ) <| List.range 0 k
-                ) <| (List.words (nargs+nrets) <| List.map E.ident vals))
+                ) << List.map (List.map E.ident)
+                  << List.filter (type_checks (args@rets))
+                  << List.words (List.length args + List.length rets) 
+                  <| List.map fst vals)
               ) <| methods
             );
             Ls.return ()
