@@ -73,9 +73,10 @@ let delay_bounding rounds delays pgm =
 
   let ignore_procs = 
     List.map D.name
-    << List.filter (fun p -> not (Program.is_defined pgm (D.name p)) || D.has loattr p)
+    << List.filter (fun p -> not (Program.is_defined pgm (D.name p)) || D.has loattr p || D.has nyattr p)
     <| Program.procs pgm
   in
+
   
   let is_boogie_ident s = Str.string_match (Str.regexp "boogie_si_record_.*") s 0 in
     
