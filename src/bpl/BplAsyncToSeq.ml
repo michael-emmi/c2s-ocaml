@@ -275,13 +275,15 @@ let delay_bounding rounds delays pgm =
 			~new_proc_rets: 
         (fun (ax,n,_) -> if n = "Main" or A.has nyattr ax then [] else [round_idx, T.Int])
 			~proc_body_prefix: 
-        (const 
+        (fun (ax,_,_) -> if A.has nyattr ax then [] else 
+          begin
             ( (round_idx $:=$ init_round_idx)
             @ ( if add_debug_info
                 then [ Ls.call "boogie_si_record_int" 
                   ~attrs:[A.unit loattr]
                   ~params:[E.ident init_round_idx] ]
-                else [] )))
+                else [] )) 
+          end )
 			~per_stmt_map: (const (translate_call <=< translate_yield))
 			~per_expr_map: (const vectorize_expr)
       
