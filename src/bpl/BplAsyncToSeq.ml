@@ -314,9 +314,7 @@ let delay_bounding rounds delays pgm =
             ( if Ls.contains_rec Ls.is_async (Procedure.stmts p) 
               then save_decls @ guess_decls
               else [] )
-            @ ( if Ls.contains_rec Ls.is_yield (Procedure.stmts p)
-                then [D.var jump_var T.Int]
-                else [] )
+            
         )
 
     (* Yield elimination / vectorization step. *)
@@ -340,6 +338,13 @@ let delay_bounding rounds delays pgm =
           end )
 			~per_stmt_map: (const (translate_call <=< translate_yield))
 			~per_expr_map: (const vectorize_expr)
+
+    << Program.translate
+      ~new_local_decls: 
+        (fun (ax,n,p) -> 
+          if Ls.contains_rec Ls.is_yield (Procedure.stmts p)
+          then [D.var jump_var T.Int]
+          else [] )
       
     (* Prevent bodiless procedures from possibly yielding. *)
     << Program.translate
