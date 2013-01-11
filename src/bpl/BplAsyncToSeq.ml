@@ -134,10 +134,10 @@ let delay_bounding rounds delays pgm =
       let jump_fixed e i = 
         Ls.ifthenelse [
           Ls.assume ~labels:[delay_label ()] (Option.reduce id (E.bool true) e);
+  				Ls.assume (E.ident round_idx |+| E.num i |<| E.ident rounds_const);
+  				Ls.assume (E.ident delays_var |+| E.num i |<=| E.ident delays_const);
   				Ls.incr (E.ident round_idx) i;
   				Ls.incr (E.ident delays_var) i;
-  				Ls.assume (E.ident round_idx |<| E.ident rounds_const);
-  				Ls.assume (E.ident delays_var |<=| E.ident delays_const)
         ]
 
       and jump_range e i k = 
@@ -148,15 +148,13 @@ let delay_bounding rounds delays pgm =
           Ls.havoc [jump_var];
           Ls.assume (E.ident jump_var |>=| E.num (Option.reduce id 1 i));
           Ls.assume (Option.reduce (fun k -> E.ident jump_var |<=| E.num k) 
-            (E.bool true) k);
-          
-          Ls.assign [Lvalue.from_expr <| E.ident round_idx] 
-            [E.ident round_idx |+| E.ident jump_var];
-          Ls.assign [Lvalue.from_expr <| E.ident delays_var] 
-            [E.ident delays_var |+| E.ident jump_var];
+              (E.bool true) k);
 
-          Ls.assume (E.ident round_idx |<| E.ident rounds_const);
-          Ls.assume (E.ident delays_var |<=| E.ident delays_const)
+          Ls.assume (E.ident round_idx |+| E.ident jump_var |<| E.ident rounds_const);
+          Ls.assume (E.ident delays_var |+| E.ident jump_var |<=| E.ident delays_const);
+
+          Ls.assign [Lv.from_expr <| E.ident round_idx] [E.ident round_idx |+| E.ident jump_var];
+          Ls.assign [Lv.from_expr <| E.ident delays_var] [E.ident delays_var |+| E.ident jump_var];
         ]
       in
       match A.get "yield" (Ls.attrs s) with
