@@ -47,6 +47,7 @@ let delay_bounding rounds delays pgm =
 	and rounds_const = sprintf "%s.ROUNDS" stage_id
 	and delays_const = sprintf "%s.DELAYBOUND" stage_id
 	and delays_var = sprintf "%s.delays" stage_id
+  and jump_var = sprintf "%s.jump" stage_id
 	and round_idx = sprintf "k"
   and ignore_round_idx = sprintf "k.ignore"
 	and init_round_idx = sprintf "k.0"
@@ -118,8 +119,7 @@ let delay_bounding rounds delays pgm =
     if Ls.has_attr "initial" s then s :: init_predicate_stmts
     else if Ls.has_attr "validity" s then s :: validity_predicate_stmts
     else s :: []	
-	in
-    
+	in    
 	
 	let new_decls = [
     D.const rounds_const T.Int ;
@@ -130,16 +130,66 @@ let delay_bounding rounds delays pgm =
   ] in
 	
 	let translate_yield s =
-		if Ls.is_yield s then
-      let ss = [
-				Ls.assume ~labels:[delay_label ()] 
-          (E.ident round_idx |<| (E.ident rounds_const |-| E.num 1)) ;
-				Ls.assume (E.ident delays_var |<| E.ident delays_const) ;
-				Ls.incr (E.ident round_idx) ; 
-				Ls.incr (E.ident delays_var) 
-      ]
-			in [ if Ls.is_short_yield s then Ls.ifthenelse ss else Ls.whiledo ss ]
-		else [s]
+    if Ls.is_yield s then      
+      let jump_fixed e i = 
+        Ls.ifthenelse [
+          Ls.assume ~labels:[delay_label ()] (Option.reduce id (E.bool true) e);
+  				Ls.incr (E.ident round_idx) i;
+  				Ls.incr (E.ident delays_var) i;
+  				Ls.assume (E.ident round_idx |<| E.ident rounds_const);
+  				Ls.assume (E.ident delays_var |<=| E.ident delays_const)
+        ]
+
+      and jump_range e i k = 
+        Ls.ifthenelse [
+          Ls.assume ~labels:[delay_label ()]
+            (Option.reduce id (E.bool true) e);
+
+          Ls.havoc [jump_var];
+          Ls.assume (E.ident jump_var |>=| E.num (Option.reduce id 1 i));
+          Ls.assume (Option.reduce (fun k -> E.ident jump_var |<=| E.num k) 
+            (E.bool true) k);
+          
+          Ls.assign [Lvalue.from_expr <| E.ident round_idx] 
+            [E.ident round_idx |+| E.ident jump_var];
+          Ls.assign [Lvalue.from_expr <| E.ident delays_var] 
+            [E.ident delays_var |+| E.ident jump_var];
+
+          Ls.assume (E.ident round_idx |<| E.ident rounds_const);
+          Ls.assume (E.ident delays_var |<=| E.ident delays_const)
+        ]
+      in
+      match A.get "yield" (Ls.attrs s) with
+      | [Left (E.Lit (Literal.Num i))] -> 
+        [ jump_fixed None i ]
+
+      | [Left (E.Lit (Literal.Num i)); Left (E.Lit (Literal.Num k))] -> 
+        [ jump_range None (Some i) (Some k) ]
+
+      | [Left e] ->
+        [ jump_range (Some e) None None ]
+          
+      | [Left e; Left (E.Lit (Literal.Num i))] -> 
+        [ jump_fixed (Some e) i ]
+
+      | [Left e; Left (E.Lit (Literal.Num i)); Left (E.Lit (Literal.Num k))] ->
+        [ jump_range (Some e) (Some i) (Some k) ]
+        
+      | _ -> [ jump_range None None None ]
+          
+    else [s]
+
+ (*  THE OLD VERSION
+     if Ls.is_yield s then
+       let ss = [
+         Ls.assume ~labels:[delay_label ()] 
+           (E.ident round_idx |<| (E.ident rounds_const |-| E.num 1)) ;
+         Ls.assume (E.ident delays_var |<| E.ident delays_const) ;
+         Ls.incr (E.ident round_idx) ; 
+         Ls.incr (E.ident delays_var) 
+       ]
+       in [ if Ls.is_short_yield s then Ls.ifthenelse ss else Ls.whiledo ss ]
+     else [s] *)
 
 	and translate_call s =
 		match s with
@@ -260,10 +310,14 @@ let delay_bounding rounds delays pgm =
     (* Add extra declarations for procedures which make async calls. *)
     << Program.translate
 			~new_local_decls: 
-        ( function
-          | _, _, p when Ls.contains_rec Ls.is_async (Procedure.stmts p) ->
-            save_decls @ guess_decls
-          | _ -> [] )
+        ( fun (_,_,p) ->
+            ( if Ls.contains_rec Ls.is_async (Procedure.stmts p) 
+              then save_decls @ guess_decls
+              else [] )
+            @ ( if Ls.contains_rec Ls.is_yield (Procedure.stmts p)
+                then [D.var jump_var T.Int]
+                else [] )
+        )
 
     (* Yield elimination / vectorization step. *)
 		<< Program.translate

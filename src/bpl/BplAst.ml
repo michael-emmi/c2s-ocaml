@@ -148,7 +148,7 @@ end = struct
  	let ident s = Id s
 	let bool b = Lit (if b then Literal.True else Literal.False)
 	let num n = Lit (Literal.Num n)
-	
+  
 	let is_term = function
 		| Lit _ | Id _ | Old _ | FnApp _ 
 		| Not _ | Neg _ | Sel _ | Upd _ -> true

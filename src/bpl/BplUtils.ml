@@ -77,8 +77,8 @@ module rec LabeledStatementExt : sig
   val attrs : t -> Attribute.t list
   val has_attr : Identifier.t -> t -> bool
   
-  val incr : ?labels:Identifier.t list -> Expression.t -> t
-  val decr : ?labels:Identifier.t list -> Expression.t -> t
+  val incr : ?labels:Identifier.t list -> Expression.t -> int -> t
+  val decr : ?labels:Identifier.t list -> Expression.t -> int -> t
   
   val skip : ?labels:Identifier.t list -> ?attrs:Attribute.t list -> unit -> t
   val yield : ?labels:Identifier.t list -> ?attrs:Attribute.t list -> unit -> t
@@ -127,17 +127,17 @@ end = struct
   let attrs = S.attrs << snd
   let has_attr a = S.has_attr a << snd
   
-	let incr ?labels:ls e = 
+	let incr ?labels:ls e i = 
 		assign 
       ~labels:(Option.list ls)
 			[Lvalue.from_expr e] 
-			[Expression.Bin (BinaryOp.Plus, e, Expression.num 1) ] 
+			[Expression.Bin (BinaryOp.Plus, e, Expression.num i) ] 
       
-	let decr ?labels:ls e = 
+	let decr ?labels:ls e i = 
 		assign 
       ~labels:(Option.list ls)
 			[Lvalue.from_expr e] 
-			[Expression.Bin (BinaryOp.Minus, e, Expression.num 1) ] 
+			[Expression.Bin (BinaryOp.Minus, e, Expression.num i) ] 
 
 	let modifies =
 		fold_stmts

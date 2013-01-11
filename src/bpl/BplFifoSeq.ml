@@ -191,8 +191,8 @@ let phase_bounding_simple phase_bound delay_bound p =
         ( Ls.add_labels [sprintf "DELAY.%n" (incr delay_label_idx; !delay_label_idx)]
           proc_end_stmts )
         @ [ Ls.assume (E.ident delay_var |<| E.ident delay_const) ;
-            Ls.incr (E.ident delay_var) ;
-            Ls.incr (shift_expr (E.ident "self") (E.ident phase_var)) ]
+            Ls.incr (E.ident delay_var) 1;
+            Ls.incr (shift_expr (E.ident "self") (E.ident phase_var)) 1 ]
         @ proc_begin_stmts in
       ( if Ls.is_short_yield (ls,s) 
         then Ls.ifthenelse ~labels:ls ss
