@@ -1,7 +1,8 @@
 #!/usr/bin/env ruby
 
 MYVERSION = "0.1"
-C2S = "#{File.dirname $0}/c2s"
+
+C2SEXE = "#{File.dirname $0}/c2s"
 BOOGIE = "Boogie"
 CLEANUP = false
 $graph = false

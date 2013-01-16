@@ -64,7 +64,7 @@ module C2S
   
   def self.sequentialize( src, mode, seq )
     cmd = [
-      C2S, src,
+      "c2s", src,
       "--seq-framework",
       mode,
       "--prepare-for-back-end",
@@ -97,7 +97,8 @@ module C2S
     puts "* and: #{args * ", "}" if not args.empty?
 
     cmd = [ 
-      BOOGIE, src, 
+      BOOGIE,
+      src, 
       "/stratifiedInline:2", "/extractLoops", 
       args, 
       "/errorLimit:1", "/errorTrace:2"
