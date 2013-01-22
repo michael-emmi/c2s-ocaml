@@ -2,7 +2,7 @@
 
 MYVERSION = "0.1"
 
-C2S = "c2s"
+C2SEXE = "#{File.dirname $0}/c2s"
 BOOGIE = "Boogie"
 $cleanup = true
 $graph = false
@@ -53,11 +53,10 @@ def prepare()
   m2s = !m2s.empty?
   $cleanup = keep.empty?
   $graph = !graph.empty?
-  rest = rest * " "
 
   src = "#{File.basename(sources.last,'.bpl')}.comp.bpl"
   puts "Combining [#{sources * ", "}] into #{src}." if sources.length > 1
-  `cat #{sources.map{|s| escape(s)} * " "} > #{src}`
+  `cat #{sources.map{|s| s.escape} * " "} > #{src}`
   
   puts " #{"-"*78} "
   return src, rounds, delays, rest

@@ -3,23 +3,21 @@
 require 'colorize'
 
 $MYNAME='clang2bpl'
-$MYVERSION=0.1
+$MYVERSION=0.2
 
 $clang = "clang"
 $llink = "llvm-link"
-$smack="opt"
+$llopt="opt"
 $boogie="Boogie"
 
-$smackhome="/Users/mje/Code/Tools/llvm/projects/smack"
-$smackprelude="#{$smackhome}/bin/prelude-int.bpl"
-$smacklib="#{$smackhome}/Debug+Asserts/lib/smack.dylib"
-#$dsalib="/isd/users/zrakamar/llvm-2.5/obj/projects/poolalloc/Debug/lib/libLLVMDataStructure.so"
+# $dsalib="/isd/users/zrakamar/llvm-2.5/obj/projects/poolalloc/Debug/
+#   lib/libLLVMDataStructure.so"
+
 $smackopts = [
-  "-load #{$smacklib}",
   "-internalize", "-mem2reg", "-die", "-lowerswitch",
   "-bpl_print", 
-  # "-debug-only=bpl", 
-  # "-debug",
+  "-debug-only=bpl", 
+  "-debug",
   "-disable-output",
   # "-raiseallocs", 
   # "-generate_lines",
@@ -86,9 +84,17 @@ def usage()
   exit 0
 end
 
-def depends( dep )
-  if `which #{dep}`.empty? then
+def depends( dep, kind = :exe, name = nil )
+  if kind == :exe and `which #{dep}`.empty? then
     err "cannot locate `#{dep}'; make sure `#{dep}' is in your PATH."
+    exit -1
+    
+  elsif kind == :env and not ENV[dep] then
+    err "environment variable dependency `#{dep}' is undefined."
+    exit -1
+    
+  elsif kind == :file and not File.exists?(dep) then
+    err "file dependency `#{dep}' does not exist."
     exit -1
   end
 end
@@ -165,9 +171,17 @@ end
 
 # Let's get to it then..
 rest = args(ARGV)
+depends('SMACKHOME',:env)
+$smackhome = ENV['SMACKHOME']
+depends("#{$smackhome}/Debug+Asserts/lib/smack.dylib",:file)
+depends("#{$smackhome}/bin/prelude-int.bpl",:file)
+$smacklib="#{$smackhome}/Debug+Asserts/lib/smack.dylib"
+$smackprelude="#{$smackhome}/bin/prelude-int.bpl"
 depends($clang)
 depends($llink)
-depends($smack)
+depends($llopt)
+$smack = "#{$llopt} -load #{$smacklib}"
+
 csources, rest = sources(rest)
 
 llvmbcs = []
@@ -204,7 +218,7 @@ else
   warn "cannot locate SMACK's prelude file (at `#{$smackprelude}')."
 end
 
-if not system("#{$smack} #{$smackopts * " "} #{bc} >> #{bpl}") then
+if not system("#{$smack} #{$smackopts * " "} #{bc} 2>> #{bpl}") then
   err "failed to translate bytecode to Boogie."
   exit -1
 end
