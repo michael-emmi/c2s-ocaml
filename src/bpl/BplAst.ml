@@ -974,14 +974,18 @@ module Program : sig
 	type t = Declaration.t list
   
   val decls : t -> Declaration.t list
+  val axioms : t -> Declaration.t list
   val global_vars : t -> Declaration.t list
+  val global_consts : t -> Declaration.t list
   val procs : t -> Declaration.t list
+  val impls : t -> Declaration.t list
   
   val map : (Declaration.t -> 'a) -> t -> 'a list
   val fold : ('a -> Declaration.t -> 'a) -> 'a -> t -> 'a
   val fold_procs : ('a -> Procedure.t -> 'a) -> 'a -> t -> 'a
   val fold_stmts : ('a -> LabeledStatement.t -> 'a) -> 'a -> t -> 'a
   val map_procs : (Procedure.t -> Procedure.t) -> t -> t
+  val map_stmts : (LabeledStatement.t -> LabeledStatement.t list) -> t -> t
   
   val print : t -> PrettyPrinting.doc
 
@@ -993,8 +997,11 @@ end = struct
 	type t = D.t list
 	
 	let decls = id
+  let axioms = List.filter (fun d -> D.kind d = D.A)
   let global_vars = List.filter (fun d -> D.kind d = D.V)
+  let global_consts = List.filter (fun d -> D.kind d = D.C)
   let procs = List.filter (fun d -> D.kind d = D.P)
+  let impls = List.filter (fun d -> D.kind d = D.I)
 
 	let map_fold fn a ds = List.map_fold_left fn a ds
 	let map_fold_procs fn a =
@@ -1011,6 +1018,9 @@ end = struct
       | Declaration.Proc (ax,n,p) -> 
         let a, p = Procedure.map_fold_stmts fn a p 
         in a, Declaration.Proc (ax,n,p)
+      | Declaration.Impl (ax,n,p) -> 
+        let a, p = Procedure.map_fold_stmts fn a p 
+        in a, Declaration.Impl (ax,n,p)
       | d -> a, d )
 		
 	let map fn = map_fold_to_map map_fold fn
