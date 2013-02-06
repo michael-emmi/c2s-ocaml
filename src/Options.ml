@@ -84,7 +84,6 @@ let global_bool fn = get_bool 1 ((), List.assoc fn !globals)
 let global_int fn = get_int 1 ((), List.assoc fn !globals)
 
 let supported_sources = [
-	"Concurrent Programs", "cp";
 	"Boolean Programs", "bp";
 	"Boogie Programs", "bpl";
 	"Petri nets", "spec";
@@ -92,16 +91,6 @@ let supported_sources = [
 ]
 
 let flags : flag_spec list = [
-	"cp-to-bpl", [],
-	"Translate Concurrent program to Boogie program.",
-	["language"],
-	false;
-	
-	"cp-to-bp", [],
-	"Translate Concurrent program to Boolean program.",
-	["language"],
-	false;
-	
 	"pn-to-bpl", [Int 0],
 	"Translate Petri net to Boogie program.",
 	["language"],
@@ -341,7 +330,7 @@ let read_flags_file f =
 		close_in chan;
 	  	List.rev !lines
 
-let filename_re = Str.regexp "^[^-][^-].*\\.\\(cp\\|bp\\|bpl\\|spec\\|cfg\\)$"
+let filename_re = Str.regexp "^[^-][^-].*\\.\\(bp\\|bpl\\|spec\\|cfg\\)$"
 let argument_re = Str.regexp "^--\\(.*\\)$"
 let flagsfile_re = Str.regexp "^flags \\(.*\\)$"
 		

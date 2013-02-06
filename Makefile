@@ -30,14 +30,7 @@ CAML_LIB_OBJ = \
 	PnToBpl \
 	BplEscAsync BplFifoSeq \
 	BplAsyncToSeq \
-	BplMultiToSingle \
-	CpAst CpParser CpLexer CpTyping CpUtils \
-	CpToBp CpToBpl \
-	CpTranslateUtils \
-	CpAsserts \
-	CpMultiToSingle \
-	CpAsyncToSeq \
-	CpEliminateYield \
+	BplMultiToSingle
 
 SOURCES = $(shell find $(SRC) $(OBJDIR) -name "*.ml" -or -name "*.mli")
 CMOFILES = $(addprefix $(OBJDIR)/, $(addsuffix .cmo, $(CAML_LIB_OBJ)))

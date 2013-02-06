@@ -4,14 +4,14 @@
 
 ## Purpose ##
 
-The purpose of this `c2s` tool is to provide parsers, printers, and
-translators for/between Boolean programs, Boogie programs, and our own flavor
-of "concurrent programs" -- a variation on the aformentioned with concurrency
-constructs such as `yield` and `post`.
+The purpose of this `c2s` tool is to provide code-to-code translations from
+concurrent programs to sequential programs.  We currently parse, print, and
+translate Boogie code (with annotations denoting concurrent semantics), and
+have partial (perhaps deprecated) support for Boolean programs as well.
 
 ## Dependencies ##
 
-* [OCaml][ocaml] -- developed with 3.12
+* [OCaml][ocaml] -- currently compiling with 4.00.1
 * [Findlib][findlib]
 
 ## Getting Started ##
@@ -20,9 +20,9 @@ To get going, simply build the sources..
 
 	make
 	   
-and run a demo, which parses the sample program and prints it back out
+and run a demo, which parses  simple Boogie program and prints it back out
 
-	./bin/c2s src/test/cp/syntax-tutorial.cp --print -
+	./bin/c2s src/test/bpl/simple.bpl --print -
 
 then look at the usage options 
 
@@ -33,12 +33,6 @@ There are also `ocmaldoc`-generated API documentation if you like
 	make doc
 
 which gets put into `doc/index.html`.
-
-A simple suite of regression tests can also be run
-
-	make test
-
-which attempts to test the parsers and end-to-end verification.
 
 ## Further questions ##
 
