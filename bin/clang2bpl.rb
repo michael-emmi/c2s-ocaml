@@ -144,7 +144,7 @@ def args( rest )
 
   if not monolithic.empty? then
     $smackopts << "-monolithic"
-    $smackprelude = "#{$smackhome}/headers/prelude_bits_monolithic.bpl"
+    $smackprelude = "#{$smackprefix}/include/prelude_bits_monolithic.bpl"
   end
   
   if not usedsa.empty? then
@@ -171,12 +171,12 @@ end
 
 # Let's get to it then..
 rest = args(ARGV)
-depends('SMACKHOME',:env)
-$smackhome = ENV['SMACKHOME']
-depends("#{$smackhome}/Debug+Asserts/lib/smack.dylib",:file)
-depends("#{$smackhome}/bin/prelude-int.bpl",:file)
-$smacklib="#{$smackhome}/Debug+Asserts/lib/smack.dylib"
-$smackprelude="#{$smackhome}/bin/prelude-int.bpl"
+depends('SMACKPREFIX',:env)
+$smackprefix = ENV['SMACKPREFIX']
+depends("#{$smackprefix}/lib/smack.dylib",:file)
+depends("#{$smackprefix}/include/prelude-int.bpl",:file)
+$smacklib="#{$smackprefix}/lib/smack.dylib"
+$smackprelude="#{$smackprefix}/include/prelude-int.bpl"
 depends($clang)
 depends($llink)
 depends($llopt)

@@ -1,24 +1,3 @@
-NARRATIVE := echo
-COMMAND := true
-AT := @
-ECHO := @
-
-ifdef NATIVECAML
-  CAMLC = ocamlopt -warn-error
-  CAMLLINK = ocamlopt
-  MOVEAFTERCAMLC = cmi cmx $(OBJ)
-else
-  CAMLC = ocamlc -dtypes -warn-error A
-  CAMLLINK = ocamlc
-  MOVEAFTERCAMLC = cmi cmo cmx o
-endif
-
-
-CAMLFLAGS = $(OPT_FLAGS) -I $(OBJDIR)
-
-ifdef DEBUG
-CAMLFLAGS += -g
-endif
 
 vpath %.mll $(SOURCEDIRS)
 vpath %.mly $(SOURCEDIRS)
@@ -26,6 +5,69 @@ vpath %.ml $(SOURCEDIRS) $(OBJDIR)
 vpath %.mli $(SOURCEDIRS) $(OBJDIR)
 vpath %.c $(SOURCEDIRS)
 
+all:: $(TODO)
+
+test: exe
+	@$(NARRATIVE) Running regression tests.
+	@$(BINDIR)/regression-test.sh
+
+dist:
+	@$(NARRATIVE) Making distributible archive $(TARBALL)
+	@ln -s -f -h . c2s
+	@tar zcvf $(TARBALL) -X .ignores -H	c2s 2> /dev/null
+	@rm c2s
+
+doc: $(CMOFILES)
+	@$(NARRATIVE) Making API documentation
+	@mkdir -p $(DOCDIR)
+	@ocamlfind ocamldoc -html -sort -d $(DOCDIR) \
+		-I $(OBJDIR) -I $(INCDIR) \
+		$(foreach ml,$(CAML_LIB_OBJ),$(shell find $(SRC) -name $(ml).ml))
+
+
+install: exe
+	@$(NARRATIVE) Installing $(NAME)
+	$(ECHO)mkdir -p $(DEST_BIN)
+	$(ECHO)$(INSTALL_PROGRAM) $(BINDIR)/$(CAML_EXE) $(DEST_BIN)
+	$(ECHO)for s in $$(find $(BINDIR) -name '*.rb'); do \
+    $(INSTALL_SCRIPT) $$s $(DEST_BIN) ; \
+	done
+	$(ECHO)for s in $$(find $(LIBDIR) -name '*.rb'); do \
+    $(INSTALL_SCRIPT) $$s $(DEST_LIB) ; \
+	done
+	
+uninstall:
+	@$(NARRATIVE) Uninstalling $(NAME)
+	$(ECHO)rm -f $(DEST_BIN)/$(CAML_EXE)
+	$(ECHO)for s in $$(find $(BINDIR) -name '*.rb'); do \
+    rm -f $(DEST_BIN)/$$(basename $$s) ; \
+	done
+	$(ECHO)for s in $$(find $(LIBDIR) -name '*.rb'); do \
+    rm -f $(DEST_LIB)/$$(basename $$s) ; \
+	done
+
+clean: default-clean
+distclean: clean
+	@rm -rf *.cmi *.annot $(TODO)
+	@rm -rf $(OBJDIR) $(DOCDIR) $(TESTLOGS)
+	@rm -f $(BINDIR)/$(CAML_TPL_EXE) $(BINDIR)/$(CAML_EXE) $(TARBALL)
+
+exe :: $(BINDIR)/$(CAML_EXE)	
+
+top :: $(BINDIR)/$(CAML_TPL_EXE)
+
+$(BINDIR)/$(CAML_TPL_EXE): $(CAML_LIB_OBJ:%=$(OBJDIR)/%.cmo)
+	@$(NARRATIVE) Making top-level $@ from $(CAML_LIB_OBJ:%=%.cmo) \
+		$(CAML_LD_LIBS:%=%.cma)
+
+	$(AT)ocamlfind ocamlmktop $(CAML_FLAGS) $(CAML_LD_FLAGS) \
+		-o $@ -linkpkg \
+		-I $(OBJDIR) -I $(TESTDIR) \
+		$(CAML_LD_LIBS:%=%.cma) $(CAML_LIB_OBJ:%=%.cmo)
+
+lib:: $(LIBDIR)/$(CAML_LIB).cma $(LIBDIR)/$(CAML_LIB).cmxa
+
+.PHONY : all clean distclean doc test dist
 
 .SECONDARY : $(MLLS:%.mll=$(OBJDIR)/%.ml) $(MLYS:%.mly=$(OBJDIR)/%.ml) \
 	     $(MLYS:%.mly=$(OBJDIR)/%.mli)
@@ -36,7 +78,7 @@ $(BINDIR)/$(CAML_EXE): $(CAML_EXE_OBJ:%=$(OBJDIR)/%.cmx)
 		$(CAML_LD_LIBS:%=%.cmxa)
 	$(ECHO)mkdir -p $(@D)
 
-	ocamlfind $(CAMLLINK) \
+	$(CAML_FIND) ocamlc \
 		$(CAMLFLAGS) $(CAML_OPT_LD_FLAGS) -o $@ -linkpkg \
 		$(CAML_LD_LIBS:%=%.cmxa) $(CAML_EXE_OBJ:%=%.cmx)
 else
@@ -45,7 +87,7 @@ $(BINDIR)/$(CAML_EXE): $(CAML_EXE_OBJ:%=$(OBJDIR)/%.cmo)
 		$(CAML_LD_LIBS:%=%.cma)
 	$(ECHO)mkdir -p $(@D)
 
-	$(AT)ocamlfind $(CAMLLINK) \
+	$(AT)$(CAML_FIND) ocamlc \
 		$(CAMLFLAGS) $(CAML_LD_FLAGS) -o $@ -linkpkg \
 		$(CAML_LD_LIBS:%=%.cma) $(CAML_EXE_OBJ:%=%.cmo)
 endif
@@ -76,10 +118,10 @@ $(OBJDIR)/%.cmi: %.mli
 $(OBJDIR)/%.cmo: %.ml
 	@$(NARRATIVE) Compiling $<
 	$(ECHO)mkdir -p $(@D)
-	$(AT)ocamlfind $(CAML_C) -linkpkg \
+	$(AT)$(CAML_FIND) ocamlc -linkpkg \
 		$(CAML_C_FLAGS) $(CAML_INCLUDES:%=-I %) -c $<
 	$(ECHO)if test $(OBJDIR) != $(<D); then \
-	    for ext in $(MOVEAFTERCAMLC); do \
+	    for ext in $(MOVE_AFTER_CAML_C); do \
 	        if test -f $(basename $<).$$ext; then \
 		    $(COMMAND) mv -f $(basename $<).$$ext $(OBJDIR); \
 		    mv -f $(basename $<).$$ext $(OBJDIR); \
@@ -90,10 +132,10 @@ $(OBJDIR)/%.cmo: %.ml
 $(OBJDIR)/%.cmx: %.ml
 	@$(NARRATIVE) Compiling $< \(to native code\)
 	$(ECHO)mkdir -p $(@D)
-	$(AT)ocamlfind $(CAML_OPT_C) -linkpkg \
+	$(AT)$(CAML_FIND) $(CAML_OPT_C) -linkpkg \
 		$(CAML_OPT_C_FLAGS) $(CAML_INCLUDES:%=-I %) -c $< -o $@
 	$(ECHO)if test $(OBJDIR) != $(<D); then \
-	    for ext in $(MOVEAFTERCAMLC); do \
+	    for ext in $(MOVE_AFTER_CAML_C); do \
 	        if test -f $(basename $<).$$ext; then \
 		    $(COMMAND) mv -f $(basename $<).$$ext $(OBJDIR); \
 		    mv -f $(basename $<).$$ext $(OBJDIR); \
@@ -105,7 +147,7 @@ $(BINDIR)/test_suite: $(CAML_TEST_OBJ:%=$(OBJDIR)/%.cmo) \
 		$(CAML_LIB_OBJ:%=$(OBJDIR)/%.cmo)
 	@$(NARRATIVE) Building $@
 
-	$(AT)ocamlfind $(CAML_C) \
+	$(AT)$(CAML_FIND) ocamlc \
 		$(CAMLFLAGS) $(CAML_LD_FLAGS) -o $@ -linkpkg \
 		-I $(OBJDIR) -I $(TESTDIR) \
 		$(CAML_LD_LIBS:%=%.cma) \
@@ -114,11 +156,11 @@ $(BINDIR)/test_suite: $(CAML_TEST_OBJ:%=$(OBJDIR)/%.cmo) \
 
 ifdef CAML_LIB
 $(LIBDIR)/$(CAML_LIB).cma: $(CAML_LIB_OBJ:%=$(OBJDIR)/%.cmo)
-	@echo Creating OCaml \(byte code\) library $@
+	@$(NARRATIVE) Creating OCaml \(byte code\) library $@
 	$(ECHO)mkdir -p $(@D)
 	$(CAML_LD) $(CAML_LD_FLAGS) -a -o $@ $(CAML_LIB_OBJ:%=$(<D)/%.cmo)
 $(LIBDIR)/$(CAML_LIB).cmxa $(LIBDIR)/$(CAML_LIB).a: $(CAML_LIB_OBJ:%=$(OBJDIR)/%.cmx)
-	@echo Creating OCaml \(native code\) library $@
+	@$(NARRATIVE) Creating OCaml \(native code\) library $@
 	$(ECHO)mkdir -p $(@D)
 	$(CAML_OPT_LD) $(CAML_OPT_LD_FLAGS) -a -o $@ $(CAML_LIB_OBJ:%=$(<D)/%.cmx)
 endif
@@ -150,8 +192,6 @@ default-clean:
 	$(ECHO)rm -f $(addsuffix .ml, $(basename $(shell find $(SRC) -name "*.mll")))
 		
 	
-
-
 FIXDEPEND:=perl -e 'while(<>) { s%[^/\\ :]+[/\\]% %g; \
 s%([-a-zA-Z0-9+-.:/\/_]+)%\$$(OBJDIR)/$$1%g; print $$_;}'
 
