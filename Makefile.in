@@ -47,7 +47,7 @@ OBJDIR := obj
 TESTDIR := $(SRC)/test
 TESTLOGS := test-log
 DEPENDDIR := obj/.depend
-SOURCEDIRS := $(SRC) $(SRC)/cp $(SRC)/bp $(SRC)/bpl $(SRC)/pn $(SRC)/cfg $(TESTDIR)
+SOURCEDIRS := $(SRC) $(SRC)/bp $(SRC)/bpl $(SRC)/pn $(SRC)/cfg $(TESTDIR)
 TOOLSDIR := tools
 
 BINDIR := bin
@@ -55,6 +55,8 @@ DOCDIR := doc
 LIBDIR := lib
 INCDIR := include
 
+prefix = @prefix@
+exec_prefix = @exec_prefix@
 DEST_BIN = @bindir@
 DEST_INC = @includedir@
 DEST_LIB = @libdir@
