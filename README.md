@@ -18,15 +18,17 @@ have partial (perhaps deprecated) support for Boolean programs as well.
 
 To get going, simply build the sources..
 
+	./configure
 	make
+	make install
 	   
 and run a demo, which parses  simple Boogie program and prints it back out
 
-	./bin/c2s src/test/bpl/simple.bpl --print -
+	c2s src/test/bpl/simple.bpl --print -
 
 then look at the usage options 
 
-	./bin/c2s
+	c2s
 
 There are also `ocmaldoc`-generated API documentation if you like
 
