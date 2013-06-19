@@ -12,8 +12,6 @@ module Tr = BplSeqFramework
 
 let stage_id = "A2S"
 
-let is_main (_,n,_) = n = "Main"
-
 let loattr = "leavealone"
 let nyattr = "noyields"
 
@@ -83,6 +81,7 @@ let delay_bounding rounds delays pgm =
     
   let init_predicate_stmts = 
     (E.ident delays_var |:=| E.num 0)
+    @ ( E.ident round_idx |:=| E.num 0)
     @ ( if add_debug_info then [ 
           Ls.call "boogie_si_record_int"
             ~attrs:[A.unit loattr]
@@ -191,12 +190,8 @@ let delay_bounding rounds delays pgm =
 
 	and translate_call s =
 		match s with
-		| ls, S.Call (ax,n,ps,rs) when n = "Main" ->
-      [ ls, S.Call (ax,n,ps@[E.num 0],rs) ]
-
 		| ls, S.Call (ax,n,ps,rs) when not (A.has "async" ax) ->      
-			[ ls, S.Call (ax, n, 
-        ps@[E.ident round_idx],
+			[ ls, S.Call (ax, n, ps@[E.ident round_idx],
         if A.has nyattr ax then rs else rs@[round_idx]
       )]
 
@@ -287,7 +282,8 @@ let delay_bounding rounds delays pgm =
     << Program.translate
       ~new_local_decls:
         ( function 
-          | ax, _, _ when A.has "entrypoint" ax -> guess_decls 
+          | ax, _, _ when A.has "entrypoint" ax -> 
+              (D.var round_idx T.Int) :: guess_decls 
           | _ -> [] )
       ~per_stmt_map: 
         ( function
@@ -320,10 +316,8 @@ let delay_bounding rounds delays pgm =
       ~ignore_attrs: [loattr]
 			~replace_global_decls: (fun d -> vectorize_var_decl d :: [])
       ~new_global_decls: ( [D.var ignore_round_idx T.Int] )
-      ~new_local_decls: 
-        (fun (ax,n,_) -> if n = "Main" then [D.var round_idx T.Int] else [])
-			~new_proc_rets: 
-        (fun (ax,n,_) -> if n = "Main" or A.has nyattr ax then [] else [round_idx, T.Int])
+		~new_proc_rets: 
+        (fun (ax,n,_) -> if A.has nyattr ax then [] else [round_idx, T.Int])
 			~proc_body_prefix: 
         (fun (ax,_,_) -> if A.has nyattr ax then [] else 
           begin

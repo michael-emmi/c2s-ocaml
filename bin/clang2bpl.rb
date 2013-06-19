@@ -6,6 +6,7 @@ $MYNAME='clang2bpl'
 $MYVERSION=0.2
 
 $clang = "clang"
+$ccargs = "-g"
 $llink = "llvm-link"
 $llopt="opt"
 $boogie="Boogie"
@@ -196,7 +197,7 @@ csources.each do |src|
   base = File.basename(src,File.extname(src))
   llvmbcs << bc = "#{base}.bc"
   puts "* Clang: #{src} => #{bc}"
-  if not system("#{$clang} #{rest * " "} -c #{src} -emit-llvm -o #{bc}") then
+  if not system("#{$clang} #{rest * " "} -c #{src} #{$ccargs} -emit-llvm -o #{bc}") then
     err "failed to compile #{src}."
     exit -1
   end  

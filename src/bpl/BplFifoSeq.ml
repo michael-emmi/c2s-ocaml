@@ -202,7 +202,7 @@ let phase_bounding_simple phase_bound delay_bound p =
     
   and call_main s =
     match s with
-    | ls, S.Call (ax,n,ps,rs) when n = Tr.main_proc_name ->
+    | ls, S.Call (ax,n,ps,rs) when A.has "formerentrypoint" ax ->
       [ ls, S.Call (ax,n,ps@[E.num 0], rs) ]
     | _ -> s :: [] 
     

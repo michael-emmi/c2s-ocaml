@@ -633,7 +633,7 @@ end = struct
 	let print (ids,s) =
 		vcat (
 			List.map (fun l -> Identifier.print l <-> colon) ids
-			@ [Statement.print s] )
+			@ [indent indent_size <| Statement.print s] )
 	let print_seq = vcat << List.map print
 	let to_string = render << print
 end
@@ -750,7 +750,7 @@ end = struct
           lbrace
 					$-$ ( match ds with [] -> empty 
 						  | _ -> indent indent_size (Declaration.print_seq ds) )
-					$-$ indent indent_size (LabeledStatement.print_seq ss)
+					$-$ LabeledStatement.print_seq ss
           $-$ rbrace
         ) bd
 	let to_string impl ax n = render << print impl ax n
@@ -807,6 +807,7 @@ and Declaration : sig
 
   val attrs : t -> Attribute.t list
   val has : string -> t -> bool
+  val strip : string -> t -> t
 	val name : t -> Identifier.t
 	val rename : (Identifier.t -> Identifier.t) -> t -> t
 	val kind : t -> kind
@@ -861,6 +862,16 @@ end = struct
     | Axiom (ax,_) -> ax
     
   let has a = Attribute.has a << attrs
+  
+  let strip a = function
+		| TypeCtor (ax,f,n,tx) -> TypeCtor (Attribute.strip a ax,f,n,tx)
+		| TypeSyn (ax,n,tx,t) -> TypeSyn (Attribute.strip a ax,n,tx,t)
+		| Const (ax,u,c,t,s) -> Const (Attribute.strip a ax,u,c,t,s)
+		| Func (ax,n,tx,ps,r,e) -> Func (Attribute.strip a ax,n,tx,ps,r,e)
+		| Var (ax,n,t,e) -> Var (Attribute.strip a ax,n,t,e)
+		| Proc (ax,n,p) -> Proc (Attribute.strip a ax,n,p)
+		| Impl (ax,n,p) -> Impl (Attribute.strip a ax,n,p)
+		| d -> d
 
 	let name = function
 		| Axiom _ -> "*axiom*"
