@@ -18,6 +18,35 @@ let nyattr = "noyields"
 (** An encoding of the depth-first task-scheduling order, a restriction of 
  * the unordered (i.e., "bag") semantics.*)
 let delay_bounding rounds delays pgm =
+
+	
+	let delay_label_idx = ref 0 in
+  
+  let add_debug_info = true in
+  
+  let print_val var =
+    if add_debug_info then [
+      Ls.call "boogie_si_record_int" ~attrs:[A.unit loattr] ~params:[E.ident var]
+    ] else []
+  in
+  
+	let guess = fun x -> sprintf "#%s?" x
+	and save = fun x-> sprintf "#%s.save" x
+	and next = fun x-> sprintf "#%s.next" x 
+	and init = fun x-> sprintf "#%s.0" x
+	and rounds_const = sprintf "#ROUNDS" 
+	and delays_const = sprintf "#DELAYBOUND" 
+	and delays_var = sprintf "#d"
+  and jump_var = sprintf "#jump"
+	and round_idx = sprintf "#k"
+  and seq_idx = sprintf "#s"
+  and seq_idx_local = sprintf "#s.me"
+  and ignore_round_idx = sprintf "#k.ignore"
+	and init_round_idx = sprintf "#k.0"
+	and delay_label _ = 
+		incr delay_label_idx;
+		sprintf "~yield.%n" (!delay_label_idx)
+	in
 	
 	let gs = List.map D.name 
     << List.filter (not << A.has "leavealone" << D.attrs)
@@ -30,28 +59,8 @@ let delay_bounding rounds delays pgm =
 	| d -> d
 	
 	and vectorize_expr = function
-	| E.Id x when List.mem x gs -> E.sel (E.ident x) [E.ident "k"]
+	| E.Id x when List.mem x gs -> E.sel (E.ident x) [E.ident round_idx]
 	| e -> e
-	in
-	
-	let delay_label_idx = ref 0 in
-  
-  let add_debug_info = true in
-  
-	let guess = fun x -> sprintf "%s.%s.guess" x stage_id
-	and save = fun x-> sprintf "%s.%s.save" x stage_id
-	and next = fun x-> sprintf "%s.%s.next" x stage_id
-	and init = fun x-> sprintf "%s.%s.0" x stage_id
-	and rounds_const = sprintf "%s.ROUNDS" stage_id
-	and delays_const = sprintf "%s.DELAYBOUND" stage_id
-	and delays_var = sprintf "%s.delays" stage_id
-  and jump_var = sprintf "%s.jump" stage_id
-	and round_idx = sprintf "k"
-  and ignore_round_idx = sprintf "k.ignore"
-	and init_round_idx = sprintf "k.0"
-	and delay_label _ = 
-		incr delay_label_idx;
-		sprintf "%s.DELAY.%n" stage_id (!delay_label_idx)
 	in
 
 	let gs_decls = 
@@ -81,15 +90,10 @@ let delay_bounding rounds delays pgm =
     
   let init_predicate_stmts = 
     (E.ident delays_var |:=| E.num 0)
-    @ ( E.ident round_idx |:=| E.num 0)
-    @ ( if add_debug_info then [ 
-          Ls.call "boogie_si_record_int"
-            ~attrs:[A.unit loattr]
-            ~params:[E.ident rounds_const] ;
-          Ls.call "boogie_si_record_int"
-            ~attrs:[A.unit loattr]
-            ~params:[E.ident delays_const]
-        ] else [] )    
+    @ (E.ident seq_idx |:=| E.num 0)
+    @ (E.ident round_idx |:=| E.num 0)
+    @ print_val (rounds_const)
+    @ print_val (delays_const)
     @ List.map (fun g -> Ls.assume (g $=$ init g)) gs
     @ ( next_gs $::=$ guess_gs )
   in
@@ -126,35 +130,37 @@ let delay_bounding rounds delays pgm =
     D.const delays_const T.Int ;
     D.axiom (E.ident delays_const |=| E.num delays) ;
     D.var delays_var T.Int ;
+    D.var seq_idx T.Int ;
   ] in
 	
 	let translate_yield s =
     if Ls.is_yield s then      
       let jump_fixed e i = 
-        Ls.ifthenelse [
+        Ls.ifthenelse ([
           Ls.assume ~labels:[delay_label ()] (Option.reduce id (E.bool true) e);
   				Ls.assume (E.ident round_idx |+| E.num i |<| E.ident rounds_const);
   				Ls.assume (E.ident delays_var |+| E.num i |<=| E.ident delays_const);
   				Ls.incr (E.ident round_idx) i;
-  				Ls.incr (E.ident delays_var) i;
-        ]
+  				Ls.incr (E.ident delays_var) i]
+          @ print_val round_idx
+          @ print_val seq_idx_local
+        )
 
       and jump_range e i k = 
-        Ls.ifthenelse [
-          Ls.assume ~labels:[delay_label ()]
-            (Option.reduce id (E.bool true) e);
-
+        Ls.ifthenelse ([
+          Ls.assume ~labels:[delay_label ()] (Option.reduce id (E.bool true) e);
           Ls.havoc [jump_var];
           Ls.assume (E.ident jump_var |>=| E.num (Option.reduce id 1 i));
           Ls.assume (Option.reduce (fun k -> E.ident jump_var |<=| E.num k) 
               (E.bool true) k);
-
           Ls.assume (E.ident round_idx |+| E.ident jump_var |<| E.ident rounds_const);
           Ls.assume (E.ident delays_var |+| E.ident jump_var |<=| E.ident delays_const);
 
           Ls.assign [Lv.from_expr <| E.ident round_idx] [E.ident round_idx |+| E.ident jump_var];
-          Ls.assign [Lv.from_expr <| E.ident delays_var] [E.ident delays_var |+| E.ident jump_var];
-        ]
+          Ls.assign [Lv.from_expr <| E.ident delays_var] [E.ident delays_var |+| E.ident jump_var]]
+          @ print_val round_idx
+          @ print_val seq_idx_local
+        )
       in
       match A.get "yield" (Ls.attrs s) with
       | [Left (E.Lit (Literal.Num i))] -> 
@@ -191,7 +197,7 @@ let delay_bounding rounds delays pgm =
 	and translate_call s =
 		match s with
 		| ls, S.Call (ax,n,ps,rs) when not (A.has "async" ax) ->      
-			[ ls, S.Call (ax, n, ps@[E.ident round_idx],
+			[ ls, S.Call (ax, n, ps@[E.ident round_idx; E.ident seq_idx],
         if A.has nyattr ax then rs else rs@[round_idx]
       )]
 
@@ -217,9 +223,10 @@ let delay_bounding rounds delays pgm =
 			  @ (gs $::=$ next_gs)
 			  @ [Ls.havoc guess_gs]
 			  @ (next_gs $::=$ guess_gs)
+        @ [Ls.incr (E.ident seq_idx) 1]
 	      @ [ 
           Ls.call ~attrs:(A.strip "async" ax) n 
-            ~params:(ps@[E.ident round_idx]) 
+            ~params:(ps@[E.ident round_idx; E.ident seq_idx]) 
             ~returns:(rs@[ignore_round_idx]) ;
           Ls.assume (E.conj (List.map (fun g -> g $=$ guess g) gs))
         ]
@@ -298,7 +305,9 @@ let delay_bounding rounds delays pgm =
       ~ignore_attrs: [loattr]
 			~new_global_decls: ( init_decls @ next_decls @ new_decls )		
 			~new_proc_params: 
-        (fun (ax,n,_) -> if A.has nyattr ax then [round_idx, T.Int] else [init_round_idx, T.Int])
+        (fun (ax,n,_) -> if A.has nyattr ax 
+          then [round_idx, T.Int; seq_idx_local, T.Int] 
+          else [init_round_idx, T.Int; seq_idx_local, T.Int])
 			~per_stmt_map: (const translate_post)	
       
     (* Add extra declarations for procedures which make async calls. *)
@@ -321,13 +330,10 @@ let delay_bounding rounds delays pgm =
 			~proc_body_prefix: 
         (fun (ax,_,_) -> if A.has nyattr ax then [] else 
           begin
-            ( (round_idx $:=$ init_round_idx)
-            @ ( if add_debug_info
-                then [ Ls.call "boogie_si_record_int" 
-                  ~attrs:[A.unit loattr]
-                  ~params:[E.ident init_round_idx] ]
-                else [] )) 
-          end )
+            Ls.add_labels ["~entry"] (round_idx $:=$ init_round_idx)
+            @ print_val init_round_idx
+            @ print_val seq_idx_local
+          end)
 			~per_stmt_map: (const (translate_call <=< translate_yield))
 			~per_expr_map: (const vectorize_expr)
 
