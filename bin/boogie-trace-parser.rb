@@ -16,9 +16,9 @@ TRACE_SIG = /\(\d+,\d+\):/
 TRACE_START = /Execution trace:/
 BOOGIE_END = /Boogie program verifier finished/
 
-IDENT = /[A-Za-z0-9$_][A-Za-z0-9.$_-]*/
+IDENT = /[A-Za-z0-9$_~][A-Za-z0-9.$_-]*/
 BOOLVAL = /(false|true)/
-NUMVAL = /(-?\d+)/
+NUMVAL = /(\d+|\(- \d+\))/
 SEPVAL = /T@sep!val!\d+/
 TVAL = /T@(#{IDENT})!val!(\d+)/
 VAL = /#{BOOLVAL}|#{NUMVAL}|#{TVAL}/
@@ -67,7 +67,7 @@ def step_to_graph(s,m,vals,g)
     end
     
     g << "#{m} -> #{n};" if m
-    g << "#{n} [label=\"{#{s[:proc]}|#{vs*'\\n'}}\"];"
+    g << "#{n} [label=\"{proc #{s[:proc]}|#{vs*'\\n'}}\"];"
   else
     vals << clean_val(s)
   end
@@ -78,7 +78,7 @@ def clean_val(v)
     "|"
   elsif m = v.match(TVAL) then
     "#{m[1]}:#{m[2]}"
-  elsif m = v.match(NUMVAL) then
+  elsif m = v.match(/\A#{NUMVAL}\z/) then
     "#{m[1]}"
   else
     v
@@ -123,13 +123,21 @@ def step(t, lines)
     
   elsif m = line.match( CALL_BEGIN ) then
     t << procedure( m[1], lines )
+    t << "|call #{m[1]}|"
     return "call"
     
   elsif m = line.match( CALL_END ) then
     return nil
     
   elsif m = line.match( VALUE_STEP ) then
-    t << m[1]
+    if m[1] =~ /\$mop/ then
+      read = clean_val(m[1]) == "$mop:0"
+      loc = lines.delete_at(0).match( VALUE_STEP )[1].gsub(/\(- (\d+)\)/,'-\1')
+      val = lines.delete_at(0).match( VALUE_STEP )[1]
+      t << "#{if read then "R" else "W" end}(#{loc},#{val})"
+    else
+      t << m[1]
+    end
     return "val"
     
   elsif m = line.match( BOOGIE_END ) then

@@ -112,6 +112,7 @@ module rec Expression : sig
 	
 	val conj: t list -> t
 	val disj: t list -> t
+  val not_: t -> t
 	
 	val forall: (Identifier.t * Type.t) list -> t -> t
 	val exists: (Identifier.t * Type.t) list -> t -> t
@@ -165,6 +166,8 @@ end = struct
 		| [] -> bool false
 		| e :: [] -> e
 		| e :: es -> List.fold_left (fun e f -> Bin (Or, e, f)) e es
+    
+  let not_ e = Not e
 		
 	let forall xs e = Q (Forall, [], xs, [], [], e)
 	let exists xs e = Q (Exists, [], xs, [], [], e)
@@ -699,7 +702,12 @@ module rec Procedure : sig
 
 	val signature : t -> Type.t list * Type.t list
 	val stmts : t -> LabeledStatement.t list
+  
+  val has_impl : t -> bool
+
+	val map_fold_exprs : ('a -> Expression.t -> 'a * Expression.t) -> 'a -> t -> 'a * t
 	val map_exprs : (Expression.t -> Expression.t) -> t -> t
+  val exists_expr : (Expression.t -> bool) -> t -> bool
   
   val map_fold_stmts : 
     ('a -> LabeledStatement.t -> 'a * LabeledStatement.t list) -> 
@@ -719,11 +727,15 @@ end = struct
 
 	let signature (_,ps,rs,_,_) = List.map snd ps, List.map snd rs
 	let stmts (_,_,_,_,bd) = Option.list <| Option.map snd bd
+  
+  let has_impl (_,_,_,_,bd) = bd <> None
 
-	let map_exprs fn (tx,ps,rs,sx,bd) =
-		tx,ps,rs,
-		List.map (Specification.map_exprs fn) sx,
-    Option.map (Tup2.map id (List.map (Ls.map_exprs fn))) bd
+	let map_fold_exprs fn a (tx,ps,rs,sx,bd) =
+    let a, sx = List.map_fold_left (Specification.map_fold_exprs fn) a sx in
+    let a, bd = Option.map_fold (Tup2.map_fold Tup2.make (List.map_fold_left (Ls.map_fold_exprs fn))) a bd in
+		a, (tx,ps,rs,sx,bd)
+	let map_exprs fn = map_fold_to_map map_fold_exprs fn
+  let exists_expr fn = fst << map_fold_exprs (fun b e -> b || fn e, e) false
     
   let map_fold_stmts fn a (tx,ps,rs,sx,bd) =
     let a, bd = 
@@ -749,7 +761,7 @@ end = struct
     $-$ option (fun (ds,ss) -> 
           lbrace
 					$-$ ( match ds with [] -> empty 
-						  | _ -> indent indent_size (Declaration.print_seq ds) )
+						  | _ -> indent indent_size (Declaration.print_seq ds) $+$ empty )
 					$-$ LabeledStatement.print_seq ss
           $-$ rbrace
         ) bd
@@ -807,12 +819,13 @@ and Declaration : sig
 
   val attrs : t -> Attribute.t list
   val has : string -> t -> bool
+  val add : Attribute.t -> t -> t
   val strip : string -> t -> t
 	val name : t -> Identifier.t
 	val rename : (Identifier.t -> Identifier.t) -> t -> t
 	val kind : t -> kind
 	val to_const : t -> t
-  
+
 	val to_string : t -> string
 	val print : t -> PrettyPrinting.doc
 	val print_seq : t list -> PrettyPrinting.doc
@@ -863,6 +876,16 @@ end = struct
     
   let has a = Attribute.has a << attrs
   
+  let add a = function
+		| TypeCtor (ax,f,n,tx) -> TypeCtor (Attribute.add a ax,f,n,tx)
+		| TypeSyn (ax,n,tx,t) -> TypeSyn (Attribute.add a ax,n,tx,t)
+		| Const (ax,u,c,t,s) -> Const (Attribute.add a ax,u,c,t,s)
+		| Func (ax,n,tx,ps,r,e) -> Func (Attribute.add a ax,n,tx,ps,r,e)
+		| Var (ax,n,t,e) -> Var (Attribute.add a ax,n,t,e)
+		| Proc (ax,n,p) -> Proc (Attribute.add a ax,n,p)
+		| Impl (ax,n,p) -> Impl (Attribute.add a ax,n,p)
+		| d -> d
+  
   let strip a = function
 		| TypeCtor (ax,f,n,tx) -> TypeCtor (Attribute.strip a ax,f,n,tx)
 		| TypeSyn (ax,n,tx,t) -> TypeSyn (Attribute.strip a ax,n,tx,t)
@@ -906,7 +929,7 @@ end = struct
 		| Var (ax,n,t,e) ->
 			Const (ax,false,n,t,())
 		| d -> d
-
+    
 	open PrettyPrinting
 			  
 	let print_function_arg = function
@@ -990,13 +1013,27 @@ module Program : sig
   val global_consts : t -> Declaration.t list
   val procs : t -> Declaration.t list
   val impls : t -> Declaration.t list
+
   
   val map : (Declaration.t -> 'a) -> t -> 'a list
   val fold : ('a -> Declaration.t -> 'a) -> 'a -> t -> 'a
+  val exists : (Declaration.t -> bool) -> t -> bool
+  val forall : (Declaration.t -> bool) -> t -> bool
+  
   val fold_procs : ('a -> Procedure.t -> 'a) -> 'a -> t -> 'a
   val fold_stmts : ('a -> LabeledStatement.t -> 'a) -> 'a -> t -> 'a
   val map_procs : (Procedure.t -> Procedure.t) -> t -> t
+
+  val map_fold_stmts : ('a -> LabeledStatement.t -> 'a * LabeledStatement.t list) -> 'a -> t -> 'a * t
   val map_stmts : (LabeledStatement.t -> LabeledStatement.t list) -> t -> t
+  val fold_stmts : ('a -> LabeledStatement.t -> 'a) -> 'a -> t -> 'a
+  val map_stmts_ctx : (Declaration.t -> LabeledStatement.t -> LabeledStatement.t list) -> t -> t
+  val exists_stmt : (LabeledStatement.t -> bool) -> t -> bool
+
+  val map_fold_exprs : (Declaration.t -> 'a -> Expression.t -> 'a * Expression.t) -> 'a -> t -> 'a * t
+  val map_exprs : (Declaration.t -> Expression.t -> Expression.t) -> t -> t
+  val fold_exprs : (Declaration.t -> 'a -> Expression.t -> 'a) -> 'a -> t -> 'a
+  val exists_expr : (Expression.t -> bool) -> t -> bool
   
   val print : t -> PrettyPrinting.doc
 
@@ -1013,8 +1050,17 @@ end = struct
   let global_consts = List.filter (fun d -> D.kind d = D.C)
   let procs = List.filter (fun d -> D.kind d = D.P)
   let impls = List.filter (fun d -> D.kind d = D.I)
-
+  
+  let exists fn = List.exists fn
+  let forall fn = List.for_all fn
+  
 	let map_fold fn a ds = List.map_fold_left fn a ds
+	let map fn = map_fold_to_map map_fold fn
+	let fold fn a = map_fold_to_fold map_fold fn a
+	(* let map_procs fn = map_fold_to_map map_fold_procs fn *)
+	(* let map_stmts fn = map_fold_to_map map_fold_stmts fn *)
+  (* let fold_stmts fn = map_fold_to_fold map_fold_stmts fn *)
+  
 	let map_fold_procs fn a =
 		map_fold ( fun a d ->
 			match d with
@@ -1022,6 +1068,15 @@ end = struct
 				let a, p = fn a (n,p) in
 				a, Declaration.Proc (ax,n,p)
 		  	| d -> a, d ) a
+  
+	let map_procs fn = snd << map_fold_procs (fun _ (_,p) -> (), fn p) ()  	
+
+	let fold_procs fn =
+		List.fold_left
+			(fun a d ->
+				 match d with
+				 | Declaration.Proc (ax,n,p) -> fn a p
+				 | _ -> a)
         
 	let map_fold_stmts fn = 
 		map_fold (fun a d -> 
@@ -1033,24 +1088,48 @@ end = struct
         let a, p = Procedure.map_fold_stmts fn a p 
         in a, Declaration.Impl (ax,n,p)
       | d -> a, d )
-		
-	let map fn = map_fold_to_map map_fold fn
-	let fold fn a = map_fold_to_fold map_fold fn a
-	(* let map_procs fn = map_fold_to_map map_fold_procs fn *)
-	(* let map_stmts fn = map_fold_to_map map_fold_stmts fn *)
-  (* let fold_stmts fn = map_fold_to_fold map_fold_stmts fn *)
   
-	let map_procs fn = snd << map_fold_procs (fun _ (_,p) -> (), fn p) ()  	
-  let fold_stmts fn a = fst << map_fold_stmts (fun a s -> fn a s, [s]) a
 	let map_stmts : (Ls.t -> Ls.t list) -> t -> t = 
     fun fn ->	snd << map_fold_stmts (fun _ s -> (), fn s) ()
+  let fold_stmts fn a = fst << map_fold_stmts (fun a s -> fn a s, [s]) a
+  let exists_stmt fn pgm =
+    fold_stmts (fun a s -> a || fn s) false pgm    		
+         
+  let map_stmts_ctx fn =
+    List.map (
+      function 
+      | D.Proc (ax,n,p) as d -> 
+        let _, p = Procedure.map_fold_stmts (fun _ s -> (), fn d s) () p 
+        in D.Proc (ax,n,p)
+      | d -> d
+    )  
 
-	let fold_procs fn =
-		List.fold_left
-			(fun a d ->
-				 match d with
-				 | Declaration.Proc (ax,n,p) -> fn a p
-				 | _ -> a)
+ 	let map_fold_exprs fn a = 
+     List.map_fold_left (fun a d ->
+ 			match d with
+       | D.Axiom (ax,e) -> 
+         let a, e = Expression.map_fold (fn d) a e 
+         in a, D.Axiom (ax, e)
+ 			| D.Func (ax,f,tx,ps,r,e) -> 
+         let a, e = Option.map_fold (Expression.map_fold (fn d)) a e
+         in a, D.Func (ax,f,tx,ps,r,e)
+ 			| D.Var (ax,n,t,e) -> 
+         let a, e = Option.map_fold (Expression.map_fold (fn d)) a e
+         in a, D.Var (ax,n,t,e)
+ 			| D.Proc (ax,n,p) -> 
+         let a, p = Procedure.map_fold_exprs (fn d) a p
+         in a, D.Proc (ax,n,p)
+ 			| D.Impl (ax,n,p) -> 
+         let a, p = Procedure.map_fold_exprs (fn d) a p
+         in a, D.Impl (ax,n,p)
+ 			| d -> a, d) a
+    
+  let map_exprs fn = 
+    snd << map_fold_exprs (fun d a e -> a, fn d e) ()
+  let fold_exprs fn a = 
+    fst << map_fold_exprs (fun d a e -> fn d a e, e) a    
+  let exists_expr fn  =
+    fst << map_fold_exprs (fun _ b e -> b || fn e, e) false
 				 
 	open PrettyPrinting
 	let print p = ( vcat <| List.map Declaration.print p) $+$ empty

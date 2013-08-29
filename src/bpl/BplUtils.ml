@@ -57,6 +57,12 @@ module Statement = struct
     | Assume (ax,_) | Assert (ax,_) | Call (ax,_,_,_) -> ax
     | _ -> []
   let has_attr a  = List.mem_assoc a << attrs
+  let strip a =
+    function
+    | Assume (ax,e) -> Assume (A.strip a ax, e)
+    | Assert (ax,e) -> Assert (A.strip a ax, e)
+    | Call (ax,p,ps,rs) -> Call (A.strip a ax, p, ps, rs)
+    | s -> s
   
 	let skip ax = Assume ([A.unit "skip"]@ax, Expression.bool true)
   let yield ax = Assume ([A.unit "yield"]@ax, Expression.bool true)
@@ -76,6 +82,7 @@ module rec LabeledStatementExt : sig
   
   val attrs : t -> Attribute.t list
   val has_attr : Identifier.t -> t -> bool
+  val strip : Identifier.t -> t -> t
   
   val incr : ?labels:Identifier.t list -> Expression.t -> int -> t
   val decr : ?labels:Identifier.t list -> Expression.t -> int -> t
@@ -126,6 +133,7 @@ end = struct
   
   let attrs = S.attrs << snd
   let has_attr a = S.has_attr a << snd
+  let strip a = Tup2.map id (S.strip a)
   
 	let incr ?labels:ls e i = 
 		assign 
@@ -216,14 +224,12 @@ end = struct
         | _ -> Proc (ax,n,(tx,ps,rs,sx,Some(ds,ss@[LabeledStatement.return ()])))
         end 
     | d -> d
-  
+
   let post_parsing = ensure_procedures_end_with_return
   
 	let parse s = 
     List.map post_parsing
-    << ParsingUtils.parse_string
-      BplParser.declarations_top
-		  BplLexer.token
+    << ParsingUtils.parse_string BplParser.declarations_top BplLexer.token
     <| s
 end
 
@@ -295,14 +301,9 @@ and ProgramExt : sig
   include module type of Program with type t = Program.t
   
   type proc_ctx = Attribute.t list * Identifier.t * Procedure.t
-  val exists : (Declaration.t -> bool) -> t -> bool
-  val forall : (Declaration.t -> bool) -> t -> bool
   val fold_over_calls : t -> ('a -> Procedure.t -> 'a) -> 'a -> LabeledStatement.t list -> 'a
-  val exists_stmt : (LabeledStatement.t -> bool) -> t -> bool
   val find : t -> Identifier.t -> Declaration.t list
   val find_proc : t -> Identifier.t -> Procedure.t list
-  val map_exprs : (Declaration.t -> Expression.t -> Expression.t) -> t -> t
-  val map_stmts : (Declaration.t -> LabeledStatement.t -> LabeledStatement.t list) -> t -> t
 
   val is_declared : t -> string -> bool
   val is_defined : t -> string -> bool
@@ -312,20 +313,19 @@ and ProgramExt : sig
   val translate : 
     ?ignore_attrs: string list ->
     ?replace_global_decls: (Declaration.t -> Declaration.t list) ->
-    ?new_global_decls: Declaration.t list ->
+    ?prepend_global_decls: Declaration.t list ->
+    ?append_global_decls: Declaration.t list ->
     ?new_proc_params: (proc_ctx -> (Identifier.t * Type.t) list) ->
     ?new_proc_rets: (proc_ctx -> (Identifier.t * Type.t) list) ->
     ?new_local_decls: (proc_ctx -> Declaration.t list) ->
     ?proc_body_prefix: (proc_ctx -> LabeledStatement.t list) ->
-    ?proc_before_ret: (proc_ctx -> LabeledStatement.t list) ->
-    ?proc_body_suffix: (proc_ctx -> LabeledStatement.t list) ->
+    ?proc_before_return: (proc_ctx -> LabeledStatement.t list) ->
     ?per_stmt_map: (proc_ctx -> LabeledStatement.t -> LabeledStatement.t list) ->
     ?per_expr_map: (Declaration.t -> Expression.t -> Expression.t) ->
     t -> t
   
   val parse : string -> t
   val post_parsing : t -> t
-  val pre_boogie : t -> t
 end = struct
 	include Program
   
@@ -333,10 +333,7 @@ end = struct
   module D = Declaration
   module Ls = LabeledStatementExt
   
-  type proc_ctx = Attribute.t list * Identifier.t * Procedure.t
-  
-  let exists fn = List.exists fn
-  let forall fn = List.for_all fn
+  type proc_ctx = Attribute.t list * Identifier.t * Procedure.t  
   			
 	let find p n = List.filter ((=) n << Declaration.name) p  
 	let find_proc p n = 
@@ -354,29 +351,6 @@ end = struct
       <| LabeledStatementExt.called ss
     in foc [] a ss
     
-  let exists_stmt fn pgm =
-    fold_stmts (fun a s -> a || fn s) false pgm    
-
-  let map_stmts fn =
-    List.map (
-      function 
-      | D.Proc (ax,n,p) as d -> 
-        let _, p = Procedure.map_fold_stmts (fun _ s -> (), fn d s) () p 
-        in D.Proc (ax,n,p)
-      | d -> d
-    )  
-
-	let map_exprs fn = 
-		List.map (fun d ->
-			match d with
-      | D.Axiom (ax,e) -> D.Axiom (ax, Expression.map (fn d) e)
-			| D.Func (ax,f,tx,ps,r,e) -> D.Func (ax,f,tx,ps,r, Option.map (Expression.map (fn d)) e)
-			| D.Var (ax,n,t,e) -> D.Var (ax,n,t,Option.map (Expression.map (fn d)) e)
-			| D.Proc (ax,n,p) -> D.Proc (ax,n,Procedure.map_exprs (fn d) p)
-			| D.Impl (ax,n,p) -> D.Impl (ax,n,Procedure.map_exprs (fn d) p)
-			| d -> d
-		)     
-    
   let is_declared pgm = ((!=) []) << find pgm
   let is_defined pgm = 
     List.exists (function 
@@ -389,13 +363,13 @@ end = struct
 	let translate
     ?ignore_attrs
 		?(replace_global_decls = List.unit)
-		?(new_global_decls = [])
+		?(prepend_global_decls = [])
+		?(append_global_decls = [])
 		?(new_proc_params = const [])
 		?(new_proc_rets = const [])
 		?(new_local_decls = const [])
 		?(proc_body_prefix = const [])
-    ?(proc_before_ret = const [])
-		?(proc_body_suffix = const [])
+    ?(proc_before_return = const [])
 		?(per_stmt_map = const List.unit)
 		?(per_expr_map = const id) =
     
@@ -404,7 +378,8 @@ end = struct
       false ignore_attrs
     in
 		
-		List.append new_global_decls
+		List.append prepend_global_decls
+    << (flip List.append) append_global_decls
 		<< List.flatten << map (
 			function Declaration.Proc (ax,n,((ts,ps,rs,es,bd) as p))
       when not (ignore ax) ->
@@ -417,11 +392,10 @@ end = struct
           (* Add the suffix just before each return statement.
             Note: we assume each procedure ends with a return. *)
           List.append (proc_body_prefix (ax,n,p))
-          << (flip List.append) (proc_body_suffix (ax,n,p))
           << snd << LabeledStatement.map_fold_stmts
             ( fun () s -> 
               match s with
-              | ls, Statement.Return -> (), proc_before_ret (ax,n,p) @ [s]
+              | ls, Statement.Return -> (), proc_before_return (ax,n,p) @ [s]
               | _ -> (), [s] )
             () <| ss 
         ) bd
@@ -460,41 +434,13 @@ end = struct
       ~ignore_attrs: (Option.list ignore_attrs)
 			~replace_global_decls:
 				( function 
-          | D.Proc (ax,n,p) -> [ D.Proc (A.add (A.num "inline" 1) ax, n, p) ]
+          | D.Proc (ax,n,p) when Procedure.has_impl p -> [ D.Proc (A.add (A.num "inline" 1) ax, n, p) ]
           | d -> d :: [] )
       p
     
-  let check_for_assertions p =  
-    if exists_stmt (function (_, Statement.Assert _) -> true | _ -> false ) p 
-    then warn "Boogie's SI-mode may not handle assertions correctly!";
-    p
-    
-  let ensure_si_procedures p =
-    let boogie_si_regexp = Str.regexp "boogie_si_record_\\([A-Za-z]+\\)" in
-
-    (flip List.append <| p)
-    << List.map (fun n -> 
-      ignore <| Str.string_match boogie_si_regexp n 0;
-      let t = Type.t (Str.matched_group 1 n) in
-      info "Adding missing procedure declaration `%s'." n;
-      D.Proc ([A.unit "leavealone"],n,([],["x",t],[],[],None)) )
-    << List.filter (fun n -> find_proc p n = [])
-    << fold_stmts (fun cs -> 
-        function 
-        | (_,Statement.Call (_,n,_,_)) when Str.string_match boogie_si_regexp n 0 ->
-          List.add_uniq n cs
-        | _ -> cs ) []
-    <| p
   
   let post_parsing p = List.map DeclarationExt.post_parsing p
-  
-  let pre_boogie =
-    check_for_assertions
-    << (fun p -> map_procs (ProcedureExt.fix_modifies p) p)
-    << (fun p -> map_procs (ProcedureExt.add_return_assign_decls p) p)
-    << (fun p -> map_stmts (const <| LabeledStatementExt.complete_returns p) p)
-    << ensure_si_procedures
-	
+    
 	let parse p = 
     post_parsing
     << ParsingUtils.parse_string

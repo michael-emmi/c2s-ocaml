@@ -25,6 +25,8 @@ let uncurry f (x,y) = f x y
 let curry3 f x y z = f (x,y,z)
 let uncurry3 f (x,y,z) = f x y z
 
+let chain fns x = List.fold_left ylppa x fns
+
 let (||||) f g = fun x -> f x || g x
 let (&&&&) f g = fun x -> f x && g x
 
@@ -38,7 +40,7 @@ let fresh_int_fn () =
 
 let warn fmt = Printf.eprintf ("Warning: " ^^ fmt ^^ "\n")
 let info fmt = Printf.eprintf ("Info: " ^^ fmt ^^ "\n")
-let error fmt = Printf.sprintf ("Error: " ^^ fmt ^^ "\n")
+let error fmt = Printf.eprintf ("Error: " ^^ fmt ^^ "\n")
 
 let rec ntimes f x n =
 	if n < 1 then x
@@ -69,6 +71,10 @@ module Tup2 = struct
 		let acc, x = f acc x in
 		let acc, y = g acc y in
 		acc, (x,y)
+  let map_fold f g a (x,y) = 
+    let a, x = f a x in
+    let a, y = g a y in
+    a, (x,y)
 	let map f g (x,y) = f x, g y
 	let mapp f (x,y) = f x, f y
 	let fold_left f a (x,y) = f (f a x) y
@@ -100,6 +106,95 @@ module Tup3 = struct
 			  | i -> i
 		  end
 		| i -> i
+end
+
+module Option = struct
+
+  let compare c x y =
+    match x, y with
+    | None, None -> 0
+    | None, _ -> -1
+    | _, None -> 1
+    | Some x, Some y -> c x y
+
+  let equal f x y =
+    match x, y with
+    | None, None -> true
+    | Some x, Some y -> f x y
+    | _ -> false
+
+  let map_fold fn acc = function
+	| None -> acc, None
+	| Some x -> let acc, x = fn acc x in acc, Some x
+	
+  let map f = function
+    | None -> None
+    | Some x -> Some (f x)
+
+  let iter f = function
+	  | None -> ()
+	  | Some x -> f x
+
+  let seq f = function
+    | None -> None
+    | Some x -> f x
+
+  let fold f a = function
+    | None -> a
+    | Some x -> f a x
+
+  let exists f = function
+    | None -> false
+    | Some x -> f x
+
+  let for_all f = function
+    | None -> true
+    | Some x -> f x
+
+  let is_some o = exists (const true) o
+  let is_none o = for_all (const false) o
+
+  let some = function
+    | Some x -> x
+    | None -> failwith "Option.some: expected Some _"
+
+  let some_or a = function
+	  | Some x -> x
+	  | None -> a
+
+  let rec cat xs =
+	  match xs with
+	  | [] -> []
+	  | None::xs -> cat xs
+	  | (Some x)::xs -> x :: cat xs
+
+  let of_string s =
+	  if s = "" then None
+	  else Some s
+
+  let reduce f a o =
+	  match o with
+	  | Some x -> f x
+	  | _ -> a
+    
+  let bool o = reduce id false o
+  let list o = reduce id [] o
+  
+  let combine o p = 
+    match o, p with
+    | Some x, Some y -> Some (x,y)
+    | None, None -> None
+    | _ -> invalid_arg "Option.combine"
+    
+  let listjoin o p =
+    match o, p with
+    | Some x, Some y -> Some (x,y)
+    | Some x, None -> Some (x,[])
+    | None, Some y -> Some ([],y)
+    | _ -> None    
+
+  let to_string fn =
+	  reduce (Printf.sprintf "Some (%s)" << fn) "None"
 end
 
 module List = struct
@@ -144,6 +239,8 @@ module List = struct
   let unit x = x::[]
   let return = unit
   let singleton = unit
+  
+  let collect fn = Option.cat << map fn
 
   let bind fn = (List.flatten << List.map fn)
   let lift = List.map
@@ -202,6 +299,12 @@ module List = struct
 
   let make f i =
     List.map f (range 0 (i-1))
+    
+  let take_drop n xs =
+    let rec aux n xs ys =
+      if n > 0 then aux (n-1) (List.hd ys :: xs) (List.tl ys)
+      else List.rev xs, ys
+    in aux n [] xs
 
   let rec drop n xs =
 	  if n > 0 then drop (n-1) (List.tl xs)
@@ -297,94 +400,6 @@ let (>>=) a fa = List.bind fa a
 let (>=>) fa fb = fun a -> List.unit a >>= fa >>= fb
 let (<=<) fb fa = fun a -> fb =<< (fa =<< List.unit a)
 
-module Option = struct
-
-  let compare c x y =
-    match x, y with
-    | None, None -> 0
-    | None, _ -> -1
-    | _, None -> 1
-    | Some x, Some y -> c x y
-
-  let equal f x y =
-    match x, y with
-    | None, None -> true
-    | Some x, Some y -> f x y
-    | _ -> false
-
-  let map_fold fn acc = function
-	| None -> acc, None
-	| Some x -> let acc, x = fn acc x in acc, Some x
-	
-  let map f = function
-    | None -> None
-    | Some x -> Some (f x)
-
-  let iter f = function
-	  | None -> ()
-	  | Some x -> f x
-
-  let seq f = function
-    | None -> None
-    | Some x -> f x
-
-  let fold f a = function
-    | None -> a
-    | Some x -> f a x
-
-  let exists f = function
-    | None -> false
-    | Some x -> f x
-
-  let for_all f = function
-    | None -> true
-    | Some x -> f x
-
-  let is_some o = exists (const true) o
-  let is_none o = for_all (const false) o
-
-  let some = function
-    | Some x -> x
-    | None -> failwith "Option.some: expected Some _"
-
-  let some_or a = function
-	  | Some x -> x
-	  | None -> a
-
-  let rec cat xs =
-	  match xs with
-	  | [] -> []
-	  | None::xs -> cat xs
-	  | (Some x)::xs -> x :: cat xs
-
-  let of_string s =
-	  if s = "" then None
-	  else Some s
-
-  let reduce f a o =
-	  match o with
-	  | Some x -> f x
-	  | _ -> a
-    
-  let bool o = reduce id false o
-  let list o = reduce id [] o
-  
-  let combine o p = 
-    match o, p with
-    | Some x, Some y -> Some (x,y)
-    | None, None -> None
-    | _ -> invalid_arg "Option.combine"
-    
-  let listjoin o p =
-    match o, p with
-    | Some x, Some y -> Some (x,y)
-    | Some x, None -> Some (x,[])
-    | None, Some y -> Some ([],y)
-    | _ -> None    
-
-  let to_string fn =
-	  reduce (Printf.sprintf "Some (%s)" << fn) "None"
-end
 type ('a, 'b) either = Left of 'a | Right of 'b
   
 module Either = struct

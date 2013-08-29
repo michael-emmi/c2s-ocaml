@@ -8,360 +8,166 @@ open BplUtils.Operators
 open BplUtils.Extensions
 open BplUtils.Abbreviations
 
-module Tr = BplSeqFramework
+module M = BplMarkers
 
-let stage_id = "A2S"
+type instrument_style = AtCallsite | SeparateProc
 
-let loattr = "leavealone"
-let nyattr = "noyields"
+(* Note: performance seems to be a few seconds better in Boogie-SI 
+  with AtCallsite, yet very slightly better in Boogie-FI with SeparateProc. *)
+
+let style = AtCallsite
 
 (** An encoding of the depth-first task-scheduling order, a restriction of 
  * the unordered (i.e., "bag") semantics.*)
-let delay_bounding rounds delays pgm =
-
-	
-	let delay_label_idx = ref 0 in
+let async_to_seq pgm =
   
-  let add_debug_info = true in
-  
-  let print_val var =
-    if add_debug_info then [
-      Ls.call "boogie_si_record_int" ~attrs:[A.unit loattr] ~params:[E.ident var]
-    ] else []
-  in
-  
-	let guess = fun x -> sprintf "#%s?" x
-	and save = fun x-> sprintf "#%s.save" x
-	and next = fun x-> sprintf "#%s.next" x 
-	and init = fun x-> sprintf "#%s.0" x
-	and rounds_const = sprintf "#ROUNDS" 
-	and delays_const = sprintf "#DELAYBOUND" 
-	and delays_var = sprintf "#d"
-  and jump_var = sprintf "#jump"
-	and round_idx = sprintf "#k"
+	let guess = fun x -> sprintf "%s.guess" x
+	and save = fun x -> sprintf "%s.save" x
+	and next = fun x -> sprintf "%s.next" x 
+  and async = fun x -> sprintf "%s.async" x
   and seq_idx = sprintf "#s"
   and seq_idx_local = sprintf "#s.me"
-  and ignore_round_idx = sprintf "#k.ignore"
-	and init_round_idx = sprintf "#k.0"
-	and delay_label _ = 
-		incr delay_label_idx;
-		sprintf "~yield.%n" (!delay_label_idx)
-	in
+  in
 	
-	let gs = List.map D.name 
-    << List.filter (not << A.has "leavealone" << D.attrs)
-		<< List.filter ((=) D.V << D.kind) 
-		<| Program.decls pgm in
-	
-	let vectorize_var_decl = function
-	| D.Var (ax,n,t,i) when List.mem n gs -> 
-		D.Var (ax,n,T.Map ([],[T.Int],t),i)
-	| d -> d
-	
-	and vectorize_expr = function
-	| E.Id x when List.mem x gs -> E.sel (E.ident x) [E.ident round_idx]
-	| e -> e
-	in
-
 	let gs_decls = 
-		List.map vectorize_var_decl
-    << List.filter ((=) D.V << D.kind &&&& (not << D.has loattr))
+    List.filter ((=) D.V << D.kind &&&& (not << D.has M.leavealone))
 		<| Program.decls pgm in
+	let gs = List.map D.name gs_decls in
 	
 	let next_decls = List.map (D.rename next) gs_decls
-	and init_decls = List.map (D.to_const << D.rename init) gs_decls
 	and guess_decls = List.map (D.rename guess) gs_decls
 	and save_decls = List.map (D.rename save) gs_decls
-	in
+  in
 
-	let save_gs = List.map save gs
-	and next_gs = List.map next gs
+	let next_gs = List.map next gs
+	and save_gs = List.map save gs
 	and guess_gs = List.map guess gs
 	in
-
-  let ignore_procs = 
-    List.map D.name
-    << List.filter (fun p -> not (Program.is_defined pgm (D.name p)) || D.has loattr p || D.has nyattr p)
-    <| Program.procs pgm
-  in
-
-  
-  let is_boogie_ident s = Str.string_match (Str.regexp "boogie_si_record_.*") s 0 in
-    
-  let init_predicate_stmts = 
-    (E.ident delays_var |:=| E.num 0)
-    @ (E.ident seq_idx |:=| E.num 0)
-    @ (E.ident round_idx |:=| E.num 0)
-    @ print_val (rounds_const)
-    @ print_val (delays_const)
-    @ List.map (fun g -> Ls.assume (g $=$ init g)) gs
-    @ ( next_gs $::=$ guess_gs )
-  in
-  
-  let validity_predicate_stmts = 
-    List.map (fun g -> Ls.assume (g $=$ guess g)) gs
-    @ ( List.flatten
-        << List.map 
-          (fun i -> 
-            List.map 
-              (fun g -> 
-                Ls.assume (
-                  E.sel (E.ident <| next g) [E.num (i-1)] 
-                  |=| E.sel (E.ident <| init g) [E.num (i)] ))
-                gs ) 
-                
-        (* Note: technically this should go from 1 to (rounds-1).
-           However, Boogie for some strange reason will not take our
-           generated program when there these constraints are completely
-           absent -- i.e. when rounds < 2. *)
-        <| List.range 1 (rounds) )
-  in
-
-    
-  let predicates s =
-    if Ls.has_attr "initial" s then s :: init_predicate_stmts
-    else if Ls.has_attr "validity" s then s :: validity_predicate_stmts
-    else s :: []	
-	in    
-	
-	let new_decls = [
-    D.const rounds_const T.Int ;
-    D.axiom (E.ident rounds_const |=| E.num rounds) ;
-    D.const delays_const T.Int ;
-    D.axiom (E.ident delays_const |=| E.num delays) ;
-    D.var delays_var T.Int ;
-    D.var seq_idx T.Int ;
-  ] in
-	
-	let translate_yield s =
-    if Ls.is_yield s then      
-      let jump_fixed e i = 
-        Ls.ifthenelse ([
-          Ls.assume ~labels:[delay_label ()] (Option.reduce id (E.bool true) e);
-  				Ls.assume (E.ident round_idx |+| E.num i |<| E.ident rounds_const);
-  				Ls.assume (E.ident delays_var |+| E.num i |<=| E.ident delays_const);
-  				Ls.incr (E.ident round_idx) i;
-  				Ls.incr (E.ident delays_var) i]
-          @ print_val round_idx
-          @ print_val seq_idx_local
-        )
-
-      and jump_range e i k = 
-        Ls.ifthenelse ([
-          Ls.assume ~labels:[delay_label ()] (Option.reduce id (E.bool true) e);
-          Ls.havoc [jump_var];
-          Ls.assume (E.ident jump_var |>=| E.num (Option.reduce id 1 i));
-          Ls.assume (Option.reduce (fun k -> E.ident jump_var |<=| E.num k) 
-              (E.bool true) k);
-          Ls.assume (E.ident round_idx |+| E.ident jump_var |<| E.ident rounds_const);
-          Ls.assume (E.ident delays_var |+| E.ident jump_var |<=| E.ident delays_const);
-
-          Ls.assign [Lv.from_expr <| E.ident round_idx] [E.ident round_idx |+| E.ident jump_var];
-          Ls.assign [Lv.from_expr <| E.ident delays_var] [E.ident delays_var |+| E.ident jump_var]]
-          @ print_val round_idx
-          @ print_val seq_idx_local
-        )
-      in
-      match A.get "yield" (Ls.attrs s) with
-      | [Left (E.Lit (Literal.Num i))] -> 
-        [ jump_fixed None i ]
-
-      | [Left (E.Lit (Literal.Num i)); Left (E.Lit (Literal.Num k))] -> 
-        [ jump_range None (Some i) (Some k) ]
-
-      | [Left e] ->
-        [ jump_range (Some e) None None ]
-          
-      | [Left e; Left (E.Lit (Literal.Num i))] -> 
-        [ jump_fixed (Some e) i ]
-
-      | [Left e; Left (E.Lit (Literal.Num i)); Left (E.Lit (Literal.Num k))] ->
-        [ jump_range (Some e) (Some i) (Some k) ]
         
-      | _ -> [ jump_range None None None ]
-          
-    else [s]
+  let pause_segment = save_gs $::=$ gs
+  and resume_segment = gs $::=$ save_gs
 
- (*  THE OLD VERSION
-     if Ls.is_yield s then
-       let ss = [
-         Ls.assume ~labels:[delay_label ()] 
-           (E.ident round_idx |<| (E.ident rounds_const |-| E.num 1)) ;
-         Ls.assume (E.ident delays_var |<| E.ident delays_const) ;
-         Ls.incr (E.ident round_idx) ; 
-         Ls.incr (E.ident delays_var) 
-       ]
-       in [ if Ls.is_short_yield s then Ls.ifthenelse ss else Ls.whiledo ss ]
-     else [s] *)
+  and begin_segment = 
+    (gs $::=$ next_gs) @ [Ls.havoc guess_gs] @ (next_gs $::=$ guess_gs)
+    @ [Ls.incr (E.ident seq_idx) 1]
+  and end_segment = List.map (fun g -> Ls.assume (g $=$ guess g)) gs
+  in
+  
+  let async_calls = 
+    match style with
+    | SeparateProc -> begin
+      Pg.fold_stmts (fun cs s -> 
+        match s with
+        | _, S.Call (ax,n,_,_) when A.has M.async ax && not (List.mem_assoc n cs) -> 
+          begin match Pg.find_proc pgm n with
+          | [_,ps,rs,_,_] -> 
+            (n,(ps,rs))::cs
+          | _ -> 
+    				warn "Cannot resolve call to procedure `%s'." n;
+            cs
+          end
+        | _ -> cs) [] pgm
+    end
+    | AtCallsite -> []
+  in
+  
+  let async_decls = List.map (fun (n,(ps,rs)) ->
+    D.proc (async n)
+      ~attrs:[]
+      ~params:ps
+      ~returns:rs
+      ~decls:(save_decls@guess_decls)
+      ~body:(        
+        pause_segment
+        @ begin_segment
+	      @ [ Ls.call ~attrs:[] n 
+            ~params:((List.map (E.ident << fst) ps)@[E.ident seq_idx]) 
+            ~returns:(List.map fst rs) ]
+        @ end_segment
+        @ resume_segment
+        @ [Ls.return ()]
+    )) async_calls
+  in
+        
+  let stmt s = 
+    if Ls.has_attr M.begin_seq s then begin
+      [ Ls.havoc guess_gs ]
+      @ ( next_gs $::=$ guess_gs )
+      @ (E.ident seq_idx |:=| E.num 0)
+      @ [s]
+    end
 
-	and translate_call s =
-		match s with
-		| ls, S.Call (ax,n,ps,rs) when not (A.has "async" ax) ->      
-			[ ls, S.Call (ax, n, ps@[E.ident round_idx; E.ident seq_idx],
-        if A.has nyattr ax then rs else rs@[round_idx]
-      )]
+    else if Ls.has_attr M.end_seq s then begin
+      [s]
+      @ List.map (fun g -> Ls.assume (g $=$ guess g)) gs
+      @ ( gs $::=$ next_gs )
+    end
 
-		| _ -> [s]
-    
-	and translate_post s =
-		match s with
-		| ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
+    else match s with
+
+		| ls, S.Call (ax,n,ps,rs) when A.has M.async ax ->
 			if rs <> [] then
 				warn "Found async call (to procedure `%s') with assignments." n;
 			
 			Ls.add_labels ls (
-        
         (* Map global variables in argument expressions 
         * to their "saved" values *)
         let ps = List.map (E.map (fun e -> 
           match e with
           | E.Id x when List.mem x gs -> E.Id (save x)
           | _ -> e
-        )) ps in
+        )) ps 
+        in 
         
-			  (save_gs $::=$ gs)
-			  @ (gs $::=$ next_gs)
-			  @ [Ls.havoc guess_gs]
-			  @ (next_gs $::=$ guess_gs)
-        @ [Ls.incr (E.ident seq_idx) 1]
-	      @ [ 
-          Ls.call ~attrs:(A.strip "async" ax) n 
-            ~params:(ps@[E.ident round_idx; E.ident seq_idx]) 
-            ~returns:(rs@[ignore_round_idx]) ;
-          Ls.assume (E.conj (List.map (fun g -> g $=$ guess g) gs))
-        ]
-			  @ (gs $::=$ save_gs) 
-			)			
-			
+        match style with
+        | SeparateProc ->
+          [Ls.call ~attrs:(A.strip M.async ax) (async n) ~params:ps ~returns:rs]
+          
+        | AtCallsite -> begin
+          pause_segment
+          @ begin_segment
+  	      @ [Ls.call ~attrs:[] n ~params:(ps@[E.ident seq_idx]) ~returns:rs]
+          @ end_segment
+          @ resume_segment
+        end)
+
+    (* Pass along the sequentialization index. *)
+		| ls, S.Call (ax,n,ps,rs) when not (A.has M.leavealone ax) ->      
+			[ ls, S.Call (ax, n, ps@[E.ident seq_idx], rs)]
+
 		| _ -> [s]
   in
 		
-	(if List.length gs = 0 then
+	if List.length gs = 0 then
 		Program.translate
 			~per_stmt_map: 
 				(fun _ -> function
-				   | ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
+				   | ls, S.Call (ax,n,ps,rs) when A.has M.async ax ->
 						if rs <> [] then
 							warn "Found async call (to procedure `%s') with assignments." n;
-					 	(ls, S.Call (A.strip "async" ax,n,ps,rs))::[]
+					 	(ls, S.Call (A.strip M.async ax,n,ps,rs))::[]
 				   | s -> s :: [])
-		<< id
+		pgm
+
 	else
-		id
-    
-    (* In the case we have introduced vectorized expressions in axioms,
-     * we must quantify the vector variable. 
-     * NOTE: This should never actually be the case, since we should not be
-     * allowed to mention global variables inside of axioms. *)
-     (* << List.map (function
-       | D.Axiom (ax,e) 
-         when E.contains (function E.Id x when x = round_idx -> true | _ -> false) e ->
-           D.Axiom (ax, E.forall [round_idx, T.Int] e)
-       | d -> d
-       ) *)
-    
-    (* << Program.add_inline_attribute *)
-      (* ~ignore_attrs: ["leavealone"; "entrypoint"] *)
-      
-    (* In case we have introduced vectorized expressions in requires clauses,
-     * we must make them refer to the initial round-index variable, rather than
-     * the returned round-index variable. *)
-    << List.map (function 
-      | D.Proc (ax,n,(tx,ps,rs,sx,bd)) when not (A.has nyattr ax) -> 
-        let sx' = List.map (function 
-          | Sp.Requires (fr,ax,e) -> 
-            Sp.Requires (fr, ax, begin
-              E.map (function 
-                | E.Id x when x = round_idx -> E.Id (init_round_idx)
-                | e -> e ) e
-            end)
-          | s -> s ) sx in
-        D.Proc (ax, n, (tx, ps, rs, sx', bd))
-      | d -> d )
-      
-    (* For procedures without bodies, add an ensures clause which says the
-     * value of the round-index variable is invariant. *)
-    << List.map (function
-      | D.Proc (ax,n,(tx,ps,rs,sx,None)) when List.mem (round_idx,T.Int) rs ->
-        D.Proc (ax,n,(tx,ps,rs,sx@[Sp.ensures (round_idx $=$ init_round_idx)],None))
-      | d -> d )
-    
-    << Program.translate
-      ~new_local_decls:
-        ( function 
-          | ax, _, _ when A.has "entrypoint" ax -> 
-              (D.var round_idx T.Int) :: guess_decls 
-          | _ -> [] )
-      ~per_stmt_map: 
-        ( function
-          | ax, _, _ when A.has "entrypoint" ax ->
-             predicates <=< translate_call
-           | _ -> List.unit )
-      
-    (* Sequentalization step: translate asynchronous calls to 
-       synchronous calls. 
-       ToDo: separate the Seq-framework part. *)
-		<< Program.translate
-      ~ignore_attrs: [loattr]
-			~new_global_decls: ( init_decls @ next_decls @ new_decls )		
+		Program.translate
+      ~prepend_global_decls: 
+        (D.var seq_idx T.Int :: next_decls)
+        
+      ~append_global_decls: async_decls
+
 			~new_proc_params: 
-        (fun (ax,n,_) -> if A.has nyattr ax 
-          then [round_idx, T.Int; seq_idx_local, T.Int] 
-          else [init_round_idx, T.Int; seq_idx_local, T.Int])
-			~per_stmt_map: (const translate_post)	
-      
-    (* Add extra declarations for procedures which make async calls. *)
-    << Program.translate
-			~new_local_decls: 
-        ( fun (_,_,p) ->
-            ( if Ls.contains_rec Ls.is_async (Procedure.stmts p) 
-              then save_decls @ guess_decls
-              else [] )
-            
-        )
+        (fun (ax,_,_) -> 
+          if A.has M.leavealone ax then [] 
+          else [seq_idx_local, T.Int])
+          
+			~new_local_decls:
+        (fun (ax,_,p) ->
+          if Procedure.exists_expr 
+            (function Expression.Id x -> List.mem x save_gs | _ -> false) p
+          then save_decls @ guess_decls
+          else if A.has M.entrypoint ax then guess_decls
+          else [])
 
-    (* Yield elimination / vectorization step. *)
-		<< Program.translate
-      ~ignore_attrs: [loattr]
-			~replace_global_decls: (fun d -> vectorize_var_decl d :: [])
-      ~new_global_decls: ( [D.var ignore_round_idx T.Int] )
-		~new_proc_rets: 
-        (fun (ax,n,_) -> if A.has nyattr ax then [] else [round_idx, T.Int])
-			~proc_body_prefix: 
-        (fun (ax,_,_) -> if A.has nyattr ax then [] else 
-          begin
-            Ls.add_labels ["~entry"] (round_idx $:=$ init_round_idx)
-            @ print_val init_round_idx
-            @ print_val seq_idx_local
-          end)
-			~per_stmt_map: (const (translate_call <=< translate_yield))
-			~per_expr_map: (const vectorize_expr)
-
-    << Program.translate
-      ~new_local_decls: 
-        (fun (ax,n,p) -> 
-          if Ls.contains_rec Ls.is_yield (Procedure.stmts p)
-          then [D.var jump_var T.Int]
-          else [] )
-      
-    (* Prevent bodiless procedures from possibly yielding. *)
-    << Program.translate
-      ~replace_global_decls:
-        ( fun d -> match d with
-          | D.Proc (ax,n,p) when is_boogie_ident n ->
-            [ D.Proc (A.add (A.unit loattr) ax,n,p) ]
-          | D.Proc (ax,n,p) when List.mem n ignore_procs ->
-            [ D.Proc (A.add (A.unit nyattr) ax,n,p) ]
-          | _ -> [d]
-        )        
-      ~per_stmt_map:
-        ( fun _ s -> match s with
-          | ls, S.Call (ax,n,ps,rs) when is_boogie_ident n ->
-            [ ls, S.Call (A.add (A.unit loattr) ax,n,ps,rs)]
-          | ls, S.Call (ax,n,ps,rs) when List.mem n ignore_procs ->
-            [ ls, S.Call (A.add (A.unit nyattr) ax,n,ps,rs)]
-          | _ -> [s]
-        )
-	)
-	<| pgm
-	
+      ~per_stmt_map: (const stmt)
+      pgm

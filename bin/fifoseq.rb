@@ -1,71 +1,111 @@
 #!/usr/bin/env ruby
 
-MYVERSION = "0.1"
+require 'colorize'
+require 'optparse'
+require 'ostruct'
+require_relative 'prelude'
+require_relative 'verify'
 
-C2SEXE = "#{File.dirname $0}/c2s"
-BOOGIE = "Boogie"
-CLEANUP = false
-$graph = false
+$MYVERSION = "0.1"
 
-puts "FiFoSeq version #{MYVERSION}"
-
-require 'C2S'
-require 'scriptprelude'
-
-def usage()
-    puts "usage: fifoseq.rb <impl>.bpl <K>"
+def c2s()
+  err "cannot find c2s in executable path." if `which c2s`.empty?
+  return "c2s"
 end
 
-def prepare()
-  sources, rest = ARGV.partition{|f| File.extname(f) == ".bpl"}
-  phases, rest = rest.partition{|a| a =~ /\/phaseBound:[0-9]+/}
-  delays, rest = rest.partition{|a| a =~ /\/delayBound:[0-9]+/}
-  m2s, rest = rest.partition{|a| a =~ /\/multitosingle/}
-  graph, rest = rest.partition{|a| a =~ /\/graph(Of)?Trace/}
+def phase_bounding_seqentialization(src, options)
+  seq = "#{File.basename(src,'.bpl')}.FiFoSeq.#{options.phases}.#{options.delays}.bpl"
+  puts "* c2s: #{src} => #{seq.blue}" unless options.quiet
+  cmd = "#{c2s()} #{src} --seq-framework --phase-bounding #{options.phases} #{options.delays} --prepare-for-back-end --print #{seq}"
+  puts cmd if options.verbose
+  err "could not translate." unless system(cmd)
+  return seq
+end
 
-  if sources.empty? then
-  	puts "Please specify at least one Boogie source file (.bpl)."
-  	exit -1
-  end
+# if this script is executing...
+if __FILE__ == $0 then
   
-  sources.each do |f|
-    if not File.exists?(f) then
-      puts "Cannot find file `#{f}'."
-      exit -1
+  options = {}
+
+  OptionParser.new do |opts|
+    options = OpenStruct.new
+    options.c2s = []
+    options.boogie = []
+    options.phases = 1
+    options.delays = 0
+    options.m2s = false
+  
+    opts.banner = "usage: #{File.basename $0} SOURCE [options]"
+  
+    opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
+      options.verbose = v
+      options.quiet = !v
     end
-  end
-
-  if phases.empty? then
-  	puts "Using default /phaseBound:1."
-  	phases = 1
-  else
-    phases = phases.first.sub(/\/phaseBound:([0-9]+)/, '\1').to_i
-  end
-
-  if delays.empty? then
-  	puts "Using default /delayBound:0."
-    delays = 0
-  else
-    delays = delays.first.sub(/\/delayBound:([0-9]+)/, '\1').to_i
-  end
-
-  m2s = !m2s.empty?  
-  $graph = !graph.empty?
-  rest = rest * " "
-
-  src = "#{File.basename(sources.last,'.bpl')}.comp.bpl"
-  puts "Combining [#{sources * ", "}] into #{src}." if sources.length > 1
-  `cat #{sources.map{|s| escape(s)} * " "} > #{src}`
   
-  puts " #{"-"*78} "
-  return src, m2s, phases, delays, rest
-end 
+    opts.on("-q", "--[no-]quiet", "Run very quietly") do |q|
+      options.quiet = q
+      options.verbose = !q
+    end
 
-def cleanup( files )
-  File.delete( *files ) if CLEANUP
+    opts.on("-k", "--[no-]keep-files", "Don't delete intermediate files") do |v|
+      options.keep = v
+    end
+
+    opts.on("-g", "--graph-of-trace", "generate a trace graph") do |g|
+      options.graph = g
+    end
+  
+    opts.separator ""
+    opts.separator "Sequentialization options:"
+
+    opts.on("-p", "--phases MAX", Integer, "The phase bound (default 1)") do |p|
+      options.phases = p
+    end
+  
+    opts.on("-d", "--delays MAX", Integer, "The delay bound (default 0)") do |d|
+      options.delays = d 
+    end
+  
+    opts.on("-m2s", "--multi-to-single", "Multi-to-single processor reduction") do |m|
+      options.m2s = m
+    end
+  
+    opts.separator ""
+    opts.separator "Boogie options:"
+
+    opts.on("-b", "--recursion-bound MAX", Integer, "The recursion bound (default ??)") do |r|
+      options.boogie << "/recursionBound:#{r}"
+    end
+  
+    opts.separator ""
+    opts.separator "Generic options:"
+  
+    opts.on_tail("-h", "--help", "Show this message") do
+      puts opts
+      exit
+    end
+
+    opts.on_tail("--version", "Show version") do
+      puts "#{File.basename $0} version #{$MYVERSION}"
+      exit
+    end
+  end.parse!
+
+  # the rest of the command line
+  err "Must specify a single Boogie source file." unless ARGV.size == 1
+  src = ARGV[0]
+  err "Source file '#{src}' does not exist." unless File.exists?(src)
+
+  t0 = Time.now()
+
+  # 1. concurrent to sequential translation
+  seq = phase_bounding_seqentialization(src, options)
+
+  # 2. verify the sequential code with Boogie
+  verify(seq, options)
+
+  # 3. remove temporary files
+  File.delete( seq ) unless options.keep
+
+  puts "#{File.basename $0} finished in #{(Time.now() - t0).round(2)}s." unless options.quiet
 end
-
-src, m2s, phases, delays, rest = prepare()
-seq = C2S.phasebounding( src, phases, delays, m2s )
-C2S.verify( seq, rest, CLEANUP, $graph )
-cleanup( [src, seq] )

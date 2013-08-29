@@ -74,7 +74,7 @@ let instrument k p =
         | _ -> [] )
 			
     (* Suffix each method with counter increments and decrements. *)
-		~proc_body_suffix: 
+    ~proc_before_return: 
       ( function 
         | (ax,n,(_,ps,rs,_,_)) when A.has "method" ax -> 
           let args = List.map fst ps

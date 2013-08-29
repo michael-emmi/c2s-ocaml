@@ -76,7 +76,7 @@ let async_to_seq p =
 			| d -> [d]
 				
 		)
-		~new_global_decls: (
+		~append_global_decls: (
 			D.parse <| sprintf (
 				"type ProcId; \
 				const unique %s: ProcId; \

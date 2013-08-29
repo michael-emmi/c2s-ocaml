@@ -1,142 +1,143 @@
 #!/usr/bin/env ruby
 
 require 'colorize'
-
-MYVERSION = "0.1"
-puts "Trombone version #{MYVERSION}".underline
-
-begin
-  require 'C2S'
-  require 'scriptprelude'
-rescue LoadError
-  raise "Missing c2s library; include its path in $RUBYLIB."
-end
-
+require 'optparse'
+require 'ostruct'
+require_relative 'prelude'
+require_relative 'clang2bpl'
+require_relative 'dbseq'
+require_relative 'verify'
 require_relative 'serencoding'
 
-$cleanup = true
-$graph = false
+$MYVERSION = "0.1"
 
-def usage()
-    puts "usage: trombone.rb <impl>.bpl /cycle:_ /rounds:_ /delayBound:_"
-end
+options = {}
 
-def parse_args()
-  bplsources, rest = ARGV.partition{|f| File.extname(f) == ".bpl"}
-  clangsources, rest = rest.partition{|f| File.extname(f) =~ /[.](c|cc|cpp)/}
-  cycle, rest = rest.partition{|a| a =~ /\/cycle:[0-9]+/}
-  deferred, rest = rest.partition{|a| a =~ /\/deferredUpdate/}
-  rounds, rest = rest.partition{|a| a =~ /\/rounds:[0-9]+/}
-  delays, rest = rest.partition{|a| a =~ /\/delayBound:[0-9]+/}
-  m2s, rest = rest.partition{|a| a =~ /\/multitosingle/}
-  keep, rest = rest.partition{|a| a =~ /\/keepFiles/}
-  graph, rest = rest.partition{|a| a =~ /\/graph(Of)?Trace/}
-  recbound, _ = rest.partition{|a| a=~ /\/recursionBound:[0-9]+/}
-  traceinfo, rest = rest.partition{|a| a =~ /\/traceInfo/}
-
-  boogieflags, rest = rest.partition{|a| a =~ /\/B[^ ]*/}
-  clangflags, rest = rest.partition{|a| a =~ /\/C[^ ]*/}
-  c2sflags, rest = rest.partition{|a| a =~ /\/S[^ ]*/}
+OptionParser.new do |opts|
   
-  clangflags = clangflags.map{|a| a[2..a.length]}
+  options = OpenStruct.new
+  options.clang = ["-g"]
+  options.smack = ["-mem-mod-impls"]
+  options.c2s = []
+  options.verifier = "Boogie-SI"
+  options.boogie = []
+  options.update = :deferred
+  options.cycle = 2
+  options.rounds = 1
+  options.delays = 0
+  options.recursion = nil
   
-  if bplsources.empty? and clangsources.empty? then
-  	err "Please specify at least one Clang (.c, .cc, .cpp) or Boogie (.bpl) source file."
-  	exit -1
+  opts.banner = "usage: #{File.basename $0} SOURCE [options]"
+  
+  opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
+    options.verbose = v
+    options.quiet = !v
   end
   
-  if not bplsources.empty? and not clangsources.empty? then
-    err "Don't know how to handle both Clang and Boogie sources at the same time."
-    exit -1
-  end
-  
-  sources = bplsources + clangsources
-  
-  sources.each do |f|
-    if not File.exists?(f) then
-      err "Cannot find file `#{f}'."
-      exit -1
-    end
-  end
-  
-  # ToDo: find a cleaner way to locate this file
-  # sources << bpl_source("#{File.dirname(__FILE__)}/../aux/ser-encoding-mje.bpl")
-  
-  if cycle.empty? then
-    puts "Using default /cycle:2."
-    $cycle = 2
-  else
-    $cycle = cycle.first.sub(/\/cycle:([0-9]+)/, '\1').to_i
-  end
-  
-  if deferred.empty? then
-    puts "Using default DIRECT update semantics."
-    $deferred = false
-  else
-    puts "Using DEFERRED update semantics."
-    $deferred = true
-  end
-  
-  if delays.empty? then
-    puts "Using default /delayBound:0."
-    delays = 0
-  else 
-    delays = delays.first.sub(/\/delayBound:([0-9]+)/, '\1').to_i
+  opts.on("-q", "--[no-]quiet", "Run very quietly") do |q|
+    options.quiet = q
+    options.verbose = !q
   end
 
-  if rounds.empty? then
-  	puts "Using default /rounds:#{delays+1}, for /delayBound:#{delays}."
-    rounds = delays + 1
-  else
-    rounds = rounds.first.sub(/\/rounds:([0-9]+)/, '\1').to_i
+  opts.on("-k", "--[no-]keep-files", "Don't delete intermediate files") do |v|
+    options.keep = v
+  end
+
+  opts.on("-g", "--graph-of-trace", "generate a trace graph") do |g|
+    options.graph = g
   end
   
-  # just read the recursion bound to know how far loops will be unrolled
-  if recbound.empty? then
-    $recbound = nil
-  else
-    $recbound = recbound.first.sub(/\/recursionBound:([0-9]+)/, '\1').to_i
+  opts.separator ""
+  opts.separator "Clang options:"
+
+  opts.on("-DSYMBOL", "Define C preprocessor SYMBOL") do |d|
+    options.clang << "-D#{d}" 
   end
   
-  $traceinfo = !traceinfo.empty?
-
-  m2s = !m2s.empty?
-  $cleanup = keep.empty?
-  $graph = !graph.empty?
+  opts.separator ""
+  opts.separator "Encoding options:"
   
-  return clangsources, clangflags, bplsources, rounds, delays, rest
-end 
+  opts.on("-u", "--update KIND", [:direct, :deferred], 
+    "Write semantics (direct or deferred)") do |u|
+    options.update = u
+  end
 
-def cleanup( files )
-  File.delete( *files ) if $cleanup
-end
+  opts.on("-c", "--cycle MAX", Integer, "The cycle bound (default 2)") do |r|
+    options.cycle = c
+  end
+  
+  opts.on("-r", "--rounds MAX", Integer, "The rounds bound (default 1)") do |r|
+    options.rounds = r 
+  end
+  
+  opts.on("-d", "--delays MAX", Integer, "The delay bound (default 0)") do |d|
+    options.delays = d 
+  end
 
-def resolve_tm_operations( src )  
-  puts "Resolving the TM operations..".underline
+  opts.separator ""
+  opts.separator "Verifier options:"
+  
+  opts.on("--verifier NAME", String, ["Boogie-SI", "Boogie-FI"], "The verification engine") do |v|
+    options.verifier = v
+  end
+  
+  opts.on("-b", "--recursion-bound MAX", Integer, "The recursion bound (default oo)") do |b|
+    options.recursion = b
+    options.boogie << "/recursionBound:#{b}"
+  end
+  
+  opts.on("-l", "--loop-unroll NUM", Integer, "Loop unrolling (default 0)") do |l|
+    options.loopunroll = l
+    options.boogie << "/loopUnroll:#{l}"
+  end
+
+  opts.separator ""
+  opts.separator "Generic options:"
+  
+  opts.on_tail("-h", "--help", "Show this message") do
+    puts opts
+    exit
+  end
+
+  opts.on_tail("--version", "Show version") do
+    puts "#{File.basename $0} version #{$MYVERSION}"
+    exit
+  end
+end.parse!
+
+def resolve_tm_operations( src, options )  
   text = File.read(src)
   pat = /[_A-Za-z0-9]*(TMInit|TXBegin|TXRead|TXWrite|TXCommit|TXAbort)[_A-Za-z0-9]*/
   File.open(src, 'w') do |f|
     f.puts text.gsub(pat,'\1')
   end  
-  puts "done."
-  puts " #{"-"*78} "  
 end
   
 # Inject the cycle-size specific axioms
-def inject_tm_harness( src, cycle = 2, recbound = nil, deferred = false, traceinfo = false, ptrs = false )
+def inject_tm_harness( src, options )
   File.open(src, 'a') do |f|
-    f.puts "#{harnessXXX(cycle,recbound,deferred,traceinfo,ptrs)}"
-    puts "* appended to: #{src}"
+    f.puts "#{harnessXXX(options)}"
   end  
-  puts " #{"-"*78} "
 end  
 
-clangsources, clangflags, bplsources, rounds, delays, rest = parse_args()
-src = C2S.clang_frontend( clangsources, clangflags, bplsources, $cleanup )
-resolve_tm_operations( src )
-inject_tm_harness( src, $cycle, $recbound, $deferred, $traceinfo, 
-  # false ) 
- !clangsources.empty? )  
-seq = C2S.delaybounding( src, rounds, delays )
-C2S.verify( seq, rest, $cleanup, $graph )
-cleanup( [src, seq] )
+t0 = Time.now()
+
+# 1. translate Clang to Boogie
+src = translate_clang_to_bpl( ARGV, options )
+
+# 2. resolve the TM operations, inject the test harness
+resolve_tm_operations(src, options)
+inject_tm_harness(src, options)  
+puts "* TM operations resolved, harness appended to #{src.blue}" unless options.quiet
+
+# 3. concurrent to sequential translation
+seq = delay_bounding_seqentialization(src, options)
+
+# 4. verify the sequential code with Boogie
+verify(seq, options)
+
+# 5. remove temporary files
+File.delete( seq ) unless options.keep
+
+puts "#{File.basename $0} finished in #{(Time.now() - t0).round(2)}s." unless options.quiet
+

@@ -6,10 +6,6 @@ open BplUtils.Operators
 open BplUtils.Extensions
 open BplUtils.Abbreviations
 
-module Tr = BplSeqFramework
-
-let stage_id = "M2S"
-
 let multi_to_single p =
 
   let gvars =
@@ -74,7 +70,7 @@ let multi_to_single p =
 					
   Program.translate
     ~ignore_attrs: ["leavealone"]
-    ~new_global_decls: (
+    ~prepend_global_decls: (
       [ D.type_ "pid" ]
       @ List.map ( fun p -> D.const ~unique:true p pid_t ) used_pids
       @ [ D.axiom << E.forall ["p",pid_t] << E.disj 

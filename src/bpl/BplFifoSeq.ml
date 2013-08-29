@@ -8,7 +8,7 @@ open BplUtils.Operators
 open BplUtils.Extensions
 open BplUtils.Abbreviations
 
-module Tr = BplSeqFramework
+module M = BplMarkers
 
 let stage_id = "FiFoSeq"
 let use_simple_translation = true
@@ -20,8 +20,8 @@ let assumptions pgm =
   if not (Program.forall (
     function 
     | D.Proc (ax,n,(_,ps,_,_,Some(ds,_))) 
-      when not (A.has "entrypoint" ax) 
-      && not (A.has "leavealone" ax)
+      when not (A.has M.entrypoint ax) 
+      && not (A.has M.leavealone ax)
       && not (List.mem "self" (List.map fst ps @ List.map D.name ds)) ->
         warn "Procedure %s does not have `self' variable." n;
         false
@@ -36,7 +36,7 @@ let assumptions pgm =
       List.for_all 
         ( fun x -> match Program.find pgm x with
           | (D.Var (_,_,T.Map(_,ts,_),_))::_ when List.mem (T.t "pid") ts -> true
-          | (D.Var (ax,_,_,_))::_ when A.has "leavealone" ax -> true
+          | (D.Var (ax,_,_,_))::_ when A.has M.leavealone ax -> true
           | (D.Var _ )::_ ->
             warn "Procedure `%s' modifies non-pid-partitioned state `%s'." n x;
             false
@@ -81,7 +81,7 @@ let phase_bounding_simple phase_bound delay_bound p =
   let init_shift_expr pid ph = E.sel (E.sel (E.ident init_shift_var) [pid]) [ph] in
     
   let gvar_decls = 
-    List.filter (not << A.has "leavealone" << D.attrs) (Program.global_vars p)
+    List.filter (not << A.has M.leavealone << D.attrs) (Program.global_vars p)
   in  
   let gvars = List.map D.name gvar_decls in
 	
@@ -94,7 +94,7 @@ let phase_bounding_simple phase_bound delay_bound p =
              else E.ident phase_var ))
     @ ( if add_debug_info
         then [ Ls.call "boogie_si_record_int" 
-          ~attrs:[A.unit "leavealone"]
+          ~attrs:[A.unit M.leavealone]
           ~params:[E.ident vphase_var] ]
         else [] )
     @ ( List.flatten
@@ -111,7 +111,7 @@ let phase_bounding_simple phase_bound delay_bound p =
     List.map (fun g -> Ls.assume (repl_var g $=$ init_var g)) gvars
     @ ( if add_debug_info then [ 
           Ls.call "boogie_si_record_int"
-            ~attrs:[A.unit "leavealone"]
+            ~attrs:[A.unit M.leavealone]
             ~params:[E.ident phase_const]
         ] else [] )
     
@@ -123,7 +123,7 @@ let phase_bounding_simple phase_bound delay_bound p =
             (shift_expr (E.ident "p") (E.num 0) |=| E.num 0)) 
         ] @ ( if add_debug_info then [ 
                 Ls.call "boogie_si_record_int" 
-                  ~attrs:[A.unit "leavealone"] 
+                  ~attrs:[A.unit M.leavealone] 
                   ~params:[E.ident delay_const]
               ] else [] )
           @ ( E.ident delay_var |:=| E.num 0 ) 
@@ -151,7 +151,7 @@ let phase_bounding_simple phase_bound delay_bound p =
 
   let async_to_sync_call s =
     match s with
-    | ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
+    | ls, S.Call (ax,n,ps,rs) when A.has M.async ax ->
       if rs <> [] then warn "Found async call (to `%s') with assignments." n;
       Ls.call ~labels:ls ~attrs:ax n ~params:ps ~returns:rs :: []
       
@@ -159,19 +159,19 @@ let phase_bounding_simple phase_bound delay_bound p =
     
   and post_to_skip s =
     match s with
-    | ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->
+    | ls, S.Call (ax,n,ps,rs) when A.has M.async ax ->
       Ls.skip ~labels:ls () :: []
 
     | _ -> [s]
     
   and calls s = 
 		match s with
-    | ls, S.Call (ax,n,ps,rs) when A.has "async" ax ->      
+    | ls, S.Call (ax,n,ps,rs) when A.has M.async ax ->      
 
       (* Asynchronous calls. *)
       Ls.ifthenelse ~labels:ls
         ~expr:( (E.ident vphase_var |+| E.num 1) |<| E.ident phase_const)
-        [ Ls.call ~attrs:(A.strip "async" ax) n 
+        [ Ls.call ~attrs:(A.strip M.async ax) n 
           ~params:(ps@[E.ident vphase_var |+| E.num 1]) ]
       :: []
       
@@ -202,13 +202,13 @@ let phase_bounding_simple phase_bound delay_bound p =
     
   and call_main s =
     match s with
-    | ls, S.Call (ax,n,ps,rs) when A.has "formerentrypoint" ax ->
+    | ls, S.Call (ax,n,ps,rs) when A.has M.formerentrypoint ax ->
       [ ls, S.Call (ax,n,ps@[E.num 0], rs) ]
     | _ -> s :: [] 
     
   and predicates s =
-    if Ls.has_attr "initial" s then s :: init_predicate_stmts
-    else if Ls.has_attr "validity" s then s :: validity_predicate_stmts
+    if Ls.has_attr M.begin_seq s then s :: init_predicate_stmts
+    else if Ls.has_attr M.end_seq s then s :: validity_predicate_stmts
     else s :: []	
 	in
 
@@ -234,7 +234,7 @@ let phase_bounding_simple phase_bound delay_bound p =
       
     (* Instrument the other procedures. *)
     << Program.translate
-      ~ignore_attrs: ["leavealone"]
+      ~ignore_attrs: [M.leavealone]
 					
   		~replace_global_decls: 
   			( fun d -> match d with 
@@ -248,7 +248,7 @@ let phase_bounding_simple phase_bound delay_bound p =
                       
   			  | _ -> [d] )
     
-      ~new_global_decls: (
+      ~prepend_global_decls: (
         [ D.const phase_const Type.Int ;
           D.axiom ( E.ident phase_const |>=| E.num 0 ) ;
           D.axiom ( E.ident phase_const |<=| E.num phase_bound ) ;
@@ -264,7 +264,7 @@ let phase_bounding_simple phase_bound delay_bound p =
 			~new_proc_params: (const [phase_var, T.Int])
       ~new_local_decls: (const (gvar_decls @ [ D.var vphase_var Type.Int ])) 
 			~proc_body_prefix: (const proc_begin_stmts)
-  		~proc_before_ret: (const proc_end_stmts)
+  		~proc_before_return: (const proc_end_stmts)
       ~per_stmt_map: (const (calls <=< delay))
       ~per_expr_map: (const id)
           

@@ -3,14 +3,6 @@
 open Prelude
 open Printf
 
-module Op = Options
-
-type ast = 
-	| BP of BpAst.Program.t
-	| BPL of BplAst.Program.t
-	| PN of PnAst.Program.t
-	| CFG of Cfg.Grammar.t
-
 let print_to_file f d =
 	match f with
 	| "-" -> output_string stdout << PrettyPrinting.render <| d;
@@ -18,67 +10,115 @@ let print_to_file f d =
 		  let oc = open_out f in
 		  output_string oc << PrettyPrinting.render <| d;
 		  close_out oc
-	  end	
-	
-let parse_program src = 
-  if Filename.check_suffix src ".bp" then
-		BP (ParsingUtils.parse_file BpParser.program_top BpLexer.token src)
+	  end
 
-	else if Filename.check_suffix src ".bpl" then
-		BPL ( BplUtils.Extensions.Program.post_parsing
-          << ParsingUtils.parse_file BplParser.program_top BplLexer.token 
-          <| src )
-		
-	else if Filename.check_suffix src ".spec" then
-		PN (ParsingUtils.parse_file PnParser.program_top PnLexer.token src)
-		
-	else if Filename.check_suffix src ".cfg" then
-		CFG (ParsingUtils.parse_file CfgParser.grammar_top CfgLexer.token src)
+type value = B of bool | I of int | S of string | F of string
+type command = string * (string * value list * (value list -> BplAst.Program.t -> BplAst.Program.t))
 
-	else failwith (sprintf "I don't know how to handle file `%s'." src)
+let cmd_to_string cmd = 
+  String.concat " " 
+  << List.cons cmd
+  << List.map (fun v -> 
+      match v with B _ -> "BOOL" | I _ -> "INT" | S s -> s | F _ -> "FILE") 
+
+let rec commands : command list = [
+
+  "help", ("print this message", [], 
+  function [] -> fun p -> 
+    Printf.printf "usage: c2s [commands] : possible commands are\n";
+    List.iter (fun (cmd,(desc,args,_)) -> 
+      let c = cmd_to_string cmd args in
+      Printf.printf "  %s %s\n" (c ^ String.make (max (24 - String.length c) 0) ' ') desc) 
+      commands;
+    p
+    | _ -> assert false    
+  );
+
+  "load", ("load & parse an input file", [F ""],
+  function [F src] -> fun _ ->
+    BplUtils.ProgramExt.post_parsing 
+    << ParsingUtils.parse_file BplParser.program_top BplLexer.token 
+    <| src
+    | _ -> assert false
+  );
+
+  "seq-framework", ("wrap {:entrypoint} procedures for subsequent steps", [], 
+  function [] ->
+    BplInitAxioms.init_axioms_at_entry_points 
+    << BplWrapEntrypoints.wrap_entrypoint_procedures
+    | _ -> assert false
+  );
+
+  "delay-bounding", ("delay-bounded translation of yield statements", [I 1; I 0], 
+  function [I rounds; I delays] ->
+    BplYieldElimination.delay_bounding rounds delays
+    | _ -> assert false
+  );
+
+  "async-to-seq-dfs", ("depth-first async-to-sequential call translation", [], 
+  function [] ->
+    BplAsyncToSeq.async_to_seq
+    | _ -> assert false
+  );
+
+  "prepare", ("prepare code for verifier (Boogie-SI or Boogie-FI)", [S "BACK-END"], 
+  function 
+    | [S "Boogie-SI"] -> BplBackend.for_boogie_si
+    | [S "Boogie-FI"] -> BplBackend.for_boogie_fi
+    | [S s] -> error "Invalid argument to 'prepare' command: %s" s; exit (-1)
+    | _ -> assert false
+  );
+  
+  "strip-internal-markers", ("get rid of internally-used annotations", [], 
+  function [] ->
+    BplMarkers.strip_internal_markers
+    | _ -> assert false
+  );
+
+  "print", ("print out the generated program", [F ""], 
+  function [F file] -> fun p ->
+    print_to_file file (BplAst.Program.print p); 
+    p
+    | _ -> assert false
+  );
+]
 
 let _ =
-	
-	let src, stages = Op.parse_cmdline () in
-	
-	List.fold_left 
-		(fun pgm stage -> match pgm, stage with
-			
-			(* Language translations *)
-			| PN p, ("pn-to-bpl",[Op.Int k]) -> BPL (PnToBpl.program k p)
-			
-			| CFG p, ("cfg-to-presburger",_) -> BPL (Parikh.image_of_cfg p)
-			| BPL p, ("violin-instrument", [Op.Int k]) -> BPL (BplViolin.instrument k p)
+  let ast = ref [] in
+  let cmdline = Queue.create () in
+  Array.iter (flip Queue.add <| cmdline) Sys.argv;
+  ignore <| Queue.pop cmdline;
+  
+  while not (Queue.is_empty cmdline) do
+    let cmd = Queue.pop cmdline in
+    try 
+      let _, types, fn = List.assoc cmd commands in
+      let args = 
+        List.map (fun t -> 
+          try 
+            let a = Queue.pop cmdline in
+            match t with
+            | B _ -> (try B (bool_of_string a) with _ -> failwith "expected Boolean")
+            | I _ -> (try I (int_of_string a) with _ -> failwith "expected integer")
+            | S _ -> S a
+            | F _ -> F a
 
-			(* Back-end necessitites *)
-			| BP p, ("prepare-for-back-end",_) -> BP (BpUtils.prepare_for_back_end p)
-			| BPL p, ("prepare-for-back-end",_) -> 
-        BPL (BplUtils.Extensions.Program.pre_boogie p)
-			
-      | BPL p, ("seq-framework",_) -> BPL (BplSeqFramework.seq_framework p)
-			| BPL p, ("esc-async",_) -> BPL (BplEscAsync.async_to_seq p)	
-			| BPL p, ("delay-bounding",[Op.Int rounds ; Op.Int delays]) -> 
-				BPL (BplAsyncToSeq.delay_bounding rounds delays p)
-      | BPL p, ("phase-bounding",[Op.Int phases ; Op.Int delays]) -> 
-        BPL (BplFifoSeq.phase_bounding phases delays p)
-      | BPL p, ("multi-to-single",_) -> BPL (BplMultiToSingle.multi_to_single p)
-			
-			(* Printing *)	
-			| BP p, ("print",[Op.File f]) -> print_to_file f (BpAst.Program.print p); BP p
-			| BPL p, ("print",[Op.File f]) -> print_to_file f (BplAst.Program.print p); BPL p
-			| PN p, ("print",[Op.File f]) -> print_to_file f (PnAst.Program.print p); PN p
-			| CFG p, ("print",[Op.File f]) -> print_to_file f (Cfg.Grammar.print p); CFG p
-				
-			| _ -> 
-				Printf.eprintf 
-					"Warning: Flag `%s' undefined for %s programs.\n"
-					(fst stage)
-					( match pgm with 
-						| BP _ -> "Boolean"
-						| BPL _ -> "Boogie" 
-						| PN _ -> "Petri net"
-						| CFG _ -> "Context-free grammar");
-				pgm
-		 )
-		(parse_program src)
-		stages
+          with Queue.Empty ->
+            error "Not enough arguments to '%s' command; requires %n." cmd (List.length types);
+            exit (-1)
+
+          | Invalid_argument e
+          | Failure e ->
+            error "Invalid arguments to '%s' command: %s" cmd e;
+            exit (-1)
+
+          ) types
+      in
+      ast := fn args !ast
+
+    with Not_found ->
+      error "Invalid command: %s." cmd;
+      exit (-1)      
+      
+  done
+  

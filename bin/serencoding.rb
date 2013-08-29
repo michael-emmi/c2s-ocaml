@@ -1,16 +1,19 @@
 require 'colorize'
 
 class String
+  def unindent()
+    idx = self.index(/[^ ]/)
+    self[idx..-1].gsub(/\n#{" " * idx}/,"\n")
+  end
   def indent(n)
     self.gsub(/\n/,"\n" + (" " * n))
+  end
+  def reindent(n)
+    self.unindent.indent(n)
   end
 end
 
 $uniqwrites = true
-
-def pwrap(v)
-  if $ptrs then "$ptr($NULL,#{v})" else v end
-end
 
 INIT_PROC = "TMInit"
 BEGIN_PROC = "TXBegin"
@@ -21,66 +24,73 @@ ABORT_PROC = "TXRollback"
 
 def beginOp( )
   <<-xxx
-  call #{BEGIN_PROC}(#{pwrap("t")});
+  call #{BEGIN_PROC}(t);
   xxx
 end
 
 def readOp( cycle )
   <<-xxx
-havoc i, l;
-assume i != CS.ignore ==> #{(1..cycle).to_a.map{|i| "t == T#{i}"}.join(" || ")};
-assume i != CS.ignore ==> CS.op(i) == CS.READ && CS.loc(i) == l;
-if (i != CS.ignore) { call CS.BeginOp(t,i); }
-call #{if $ptrs then "p" else "v" end} := #{READ_PROC}(#{pwrap("t")},#{pwrap("l")});
-#{if $ptrs then "v := $off(p);" end}
-assume i != CS.ignore ==> CS.val(i) == v;
-if (i != CS.ignore) { call CS.EndOp(t,i); }  
+  havoc i, l;
+  assume 0 < l && l < NUM_LOCS;
+  assume i != CS.ignore ==> #{(1..cycle).to_a.map{|i| "t == T#{i}"}.join(" || ")};
+  assume i != CS.ignore ==> CS.op(i) == CS.READ && CS.loc(i) == l;
+  if (i != CS.ignore) { call CS.BeginOp(t,i); }
+    call v := #{READ_PROC}(t,l);
+    assume i != CS.ignore ==> CS.val(i) == v;
+    if (i != CS.ignore) { call CS.EndOp(t,i); 
+  }  
   xxx
 end
 
-def writeOp( cycle )
+def writeOp( cycle ) 
   <<-xxx
-havoc i, l, v;
-#{if $uniqwrites then "v := uniq_val; uniq_val := uniq_val + 1;" end}
-assume i != CS.ignore ==> #{(1..cycle).to_a.map{|i| "t == T#{i}"}.join(" || ")};
+  havoc i, l, v;
+  #{if $uniqwrites then "v := uniq_val; uniq_val := uniq_val + 1;" end}
+  assume 0 < l && l < NUM_LOCS;
+  assume i != CS.ignore ==> #{(1..cycle).to_a.map{|i| "t == T#{i}"}.join(" || ")};
 #{if $deferred then
-"if (i != CS.ignore) {
+  "if (i != CS.ignore) {
     assume CS.thread(i) == t && CS.op(i) == CS.WRITE && CS.loc(i) == l && CS.val(i) == v;
     CS.deferred[i] := true;
     i := CS.ignore;
-}"
+  }"
 else
-"assume i != CS.ignore ==> CS.op(i) == CS.WRITE && CS.loc(i) == l && CS.val(i) == v;"
+  "assume i != CS.ignore ==> CS.op(i) == CS.WRITE && CS.loc(i) == l && CS.val(i) == v;"
 end}
-if (i != CS.ignore) { call CS.BeginOp(t,i); }
-call #{WRITE_PROC}(#{pwrap("t")},#{pwrap("l")},#{pwrap("v")});
-if (i != CS.ignore) { call CS.EndOp(t,i); }
+  if (i != CS.ignore) { call CS.BeginOp(t,i); }
+  call #{WRITE_PROC}(t,l,v);
+  if (i != CS.ignore) { call CS.EndOp(t,i); }
   xxx
 end
 
 def commitOp( cycle )
   <<-xxx
-havoc i;
-assume i != CS.ignore ==> #{(1..cycle).to_a.map{|i| "t == T#{i}"}.join(" || ")};
+  havoc i;
+  assume i != CS.ignore ==> #{(1..cycle).to_a.map{|i| "t == T#{i}"}.join(" || ")};
 #{if $deferred then
   "assume i != CS.ignore ==> CS.thread(i) == t && CS.op(i) == CS.WRITE;"
 else
   "assume i == CS.ignore;"
 end}
-if (i != CS.ignore) { call CS.BeginOp(t,i); }
-call b := #{COMMIT_PROC}(#{pwrap("t")});
-assume b;
-if (i != CS.ignore) { call CS.EndOp(t,i); }
+  if (i != CS.ignore) { call CS.BeginOp(t,i); }
+  call b := #{COMMIT_PROC}(t);
+  assume b;
+  if (i != CS.ignore) { call CS.EndOp(t,i); }
   xxx
 end
 
 def abortOp( cycle )
   <<-xxx
-// ToDo: implement call to #{ABORT_PROC}
+  // ToDo: implement call to #{ABORT_PROC}
   xxx
 end
 
-def harnessXXX( cycle, recbound, deferred=false, printing=false, ptrs=false )
+def harnessXXX( options )
+  cycle = options.cycle
+  recbound = options.recursion
+  deferred = options.update == :deferred
+  printing = false
+
   size = 2*cycle
   idxs = (0...size).to_a
   evens = idxs.select{|i| i%2 == 0}
@@ -93,22 +103,12 @@ def harnessXXX( cycle, recbound, deferred=false, printing=false, ptrs=false )
   
   $deferred = deferred  
   $shortcut_inlining = false
-  $ptrs = ptrs
   
-  puts "Generating #{cycle}-cycle detection harness with:".underline
-  puts "* #{if more_thds then "from #{cycle} to #{cycle+recbound}" else "exactly #{cycle}" end} threads."
-  puts "* #{if more_txs then "from 1 to #{1+recbound}" else "exactly 1" end} transaction(s) per thread."
-  puts "* #{if more_ops then "any R-(R+W)^i-W-C (for i=0..#{recbound})" else "only R-W-C" end} transactions."
-  puts "* #{if ptrs then "using" else "not using" end} pointer modeling."
-  
-  def inline()
-    if $shortcut_inlining then
-      "{:inline 1}" 
-    else 
-      "" 
-    end
-  end
-  
+  puts "Generating #{cycle}-cycle detection harness with:".underline if options.verbose
+  puts "* #{if more_thds then "from #{cycle} to #{cycle+recbound}" else "exactly #{cycle}" end} threads." if options.verbose
+  puts "* #{if more_txs then "from 1 to #{1+recbound}" else "exactly 1" end} transaction(s) per thread." if options.verbose
+  puts "* #{if more_ops then "any R-(R+W)^i-W-C (for i=0..#{recbound})" else "only R-W-C" end} transactions." if options.verbose
+    
   def pred( i, n )
     return (if i == 0 then n-1 else i-1 end);
   end
@@ -120,15 +120,9 @@ def harnessXXX( cycle, recbound, deferred=false, printing=false, ptrs=false )
   <<-xxx
     
 // The #{cycle}-length conflict cycle discovery encoding begins here.
-#{if $ptrs then
-"type tid = int;
+type tid = int;
 type loc = int;
-type val = int;"
-else
-"type tid = int;
-type loc = int;
-type val = int;"
-end}
+type val = int;
 type op;
 
 #{if printing then
@@ -144,11 +138,11 @@ else
   "// boogie_si_record_XXX procedure declarations suppressed."
 end}
 
-const unique #{(1..cycle).to_a.map{|i| "T#{i}"}.join(", ")}: tid;
-#{if $ptrs then 
-"// using int for tid : just number those ints."
-  (1..cycle).to_a.map{|i| "axiom T#{i} == #{i-1};"}.join("\n")
-end}
+const #{(1..cycle).to_a.map{|i| "T#{i}"}.join(", ")}: tid;
+#{(1..cycle).to_a.map{|i| "axiom T#{i} == #{i-1};"}.join("\n")}
+
+const NUM_LOCS: int;
+axiom NUM_LOCS == 100;
 
 #{if $uniqwrites then "var uniq_val: int;" end}
 
@@ -242,257 +236,250 @@ axiom CS.tbuddy(#{i}) == #{pred(i,size)} && CS.tbuddy(#{pred(i,size)}) == #{i};"
   "axiom CS.concop(#{i}) == CS.concop(#{succ(i,size)});"
 }.join("\n")}
 
-procedure #{inline()} CS.BeginOp(t: tid, i: int)
+procedure CS.BeginOp(t: tid, i: int)
 {
-    var j: int;    
-        
-    if (i != CS.ignore) {
-        assume i >= 0 && i < #{size};
-        assume CS.thread(i) == t;
-        assume !CS.started[i];
-        #{if $deferred then "assume CS.op(i) == CS.WRITE ==> CS.deferred[i];" end}
+  var j: int;    
+      
+  if (i != CS.ignore) {
+    assume i >= 0 && i < #{size};
+    assume CS.thread(i) == t;
+    assume !CS.started[i];
+    #{if $deferred then "assume CS.op(i) == CS.WRITE ==> CS.deferred[i];" end}
+
+    j := CS.pred(i);        
     
-        j := CS.pred(i);        
-        
-        if ((#{evens.map{|i| "i==#{i}"}.join(" || ")}) && CS.sametx(i) && !CS.sameop(i) && !CS.finished[j]) {
-            CS.waiting[t] := true;
-        
-        } else {
-            assume (#{evens.map{|i| "i==#{i}"}.join(" || ")}) ==> CS.finished[j] || (CS.sameop(j) && (CS.finished[CS.cbuddy(j)] || CS.concop(CS.cbuddy(j))));
-            assume (#{odds.map{|i| "i==#{i}"}.join(" || ")}) ==> CS.finished[j] || CS.concop(j);
-            CS.waiting[t] := false;
-        }        
+    if ((#{evens.map{|i| "i==#{i}"}.join(" || ")}) && CS.sametx(i) && !CS.sameop(i) && !CS.finished[j]) {
+      CS.waiting[t] := true;
     
-        CS.started[i] := true;
-        if (CS.sameop(i)) {
-            CS.started[ CS.tbuddy(i) ] := true;
-        }
-        
-        #{if printing then "
-        call {:leavealone} boogie_si_record_int(i);
-        call {:leavealone} boogie_si_record_tid(t);
-        call {:leavealone} boogie_si_record_op(CS.op(i));
-        call {:leavealone} boogie_si_record_loc(CS.loc(i));
-        call {:leavealone} boogie_si_record_val(CS.val(i));"
-        end}
-        
-    } 
-    return;
+    } else {
+      assume (#{evens.map{|i| "i==#{i}"}.join(" || ")}) ==> CS.finished[j] || (CS.sameop(j) && (CS.finished[CS.cbuddy(j)] || CS.concop(CS.cbuddy(j))));
+      assume (#{odds.map{|i| "i==#{i}"}.join(" || ")}) ==> CS.finished[j] || CS.concop(j);
+      CS.waiting[t] := false;
+    }        
+
+    CS.started[i] := true;
+    if (CS.sameop(i)) {
+        CS.started[ CS.tbuddy(i) ] := true;
+    }    
+#{if printing then "
+    call {:leavealone} boogie_si_record_int(i);
+    call {:leavealone} boogie_si_record_tid(t);
+    call {:leavealone} boogie_si_record_op(CS.op(i));
+    call {:leavealone} boogie_si_record_loc(CS.loc(i));
+    call {:leavealone} boogie_si_record_val(CS.val(i));"
+end}      
+  } 
+  return;
 }
 
-procedure #{inline()} CS.EndOp(t: tid, i: int)
+procedure CS.EndOp(t: tid, i: int)
 {    
-    if (i != CS.ignore) {
-        assume i >= 0 && i < #{size};
-        assume CS.thread(i) == t;
-        assume CS.started[i] && !CS.finished[i];
-        assume CS.concop(i) ==> CS.started[ CS.cbuddy(i) ];
-        assume CS.sameop(i) && CS.concop(CS.tbuddy(i)) ==> CS.started[CS.cbuddy(CS.tbuddy(i))];
+  if (i != CS.ignore) {
+    assume i >= 0 && i < #{size};
+    assume CS.thread(i) == t;
+    assume CS.started[i] && !CS.finished[i];
+    assume CS.concop(i) ==> CS.started[ CS.cbuddy(i) ];
+    assume CS.sameop(i) && CS.concop(CS.tbuddy(i)) ==> CS.started[CS.cbuddy(CS.tbuddy(i))];
 
-        CS.finished[i] := true;
-        if (CS.sameop(i)) {
-            CS.finished[ CS.tbuddy(i) ] := true;
-        }
-        
-        #{if printing then "
-        call {:leavealone} boogie_si_record_int(i);
-        call {:leavealone} boogie_si_record_tid(t);
-        call {:leavealone} boogie_si_record_op(CS.op(i));
-        call {:leavealone} boogie_si_record_loc(CS.loc(i));
-        call {:leavealone} boogie_si_record_val(CS.val(i));
-        
-        if (CS.concop(i)) {
-            call {:leavealone} boogie_si_record_sep(s);
-            call {:leavealone} boogie_si_record_sep(s);
-            call {:leavealone} boogie_si_record_int(i);
-            call {:leavealone} boogie_si_record_bool(CS.started[i-1]);
-            call {:leavealone} boogie_si_record_bool(CS.started[i+1]);
-        }
-        
-        if (CS.sameop(i)) {
-            call {:leavealone} boogie_si_record_sep(s);
-            call {:leavealone} boogie_si_record_sep(s);
-            call {:leavealone} boogie_si_record_sep(s);
-            call {:leavealone} boogie_si_record_int( i );
-            call {:leavealone} boogie_si_record_int( CS.tbuddy(i) );
-        }
-        
-        if (CS.waiting[t]) {
-            call {:leavealone} boogie_si_record_sep(s);
-            call {:leavealone} boogie_si_record_bool(true);
-        }"        
-        end}
-
-        assume CS.started[i] ==> CS.finished[i];
+    CS.finished[i] := true;
+    if (CS.sameop(i)) {
+        CS.finished[ CS.tbuddy(i) ] := true;
+    }    
+#{if printing then "
+    call {:leavealone} boogie_si_record_int(i);
+    call {:leavealone} boogie_si_record_tid(t);
+    call {:leavealone} boogie_si_record_op(CS.op(i));
+    call {:leavealone} boogie_si_record_loc(CS.loc(i));
+    call {:leavealone} boogie_si_record_val(CS.val(i));
+    
+    if (CS.concop(i)) {
+      call {:leavealone} boogie_si_record_sep(s);
+      call {:leavealone} boogie_si_record_sep(s);
+      call {:leavealone} boogie_si_record_int(i);
+      call {:leavealone} boogie_si_record_bool(CS.started[i-1]);
+      call {:leavealone} boogie_si_record_bool(CS.started[i+1]);
     }
-    return;
+    
+    if (CS.sameop(i)) {
+      call {:leavealone} boogie_si_record_sep(s);
+      call {:leavealone} boogie_si_record_sep(s);
+      call {:leavealone} boogie_si_record_sep(s);
+      call {:leavealone} boogie_si_record_int( i );
+      call {:leavealone} boogie_si_record_int( CS.tbuddy(i) );
+    }
+    
+    if (CS.waiting[t]) {
+        call {:leavealone} boogie_si_record_sep(s);
+        call {:leavealone} boogie_si_record_bool(true);
+    }"        
+end}
+    assume CS.started[i] ==> CS.finished[i];
+  }
+  return;
 }
 
 // Each transaction reads, writes, and commits...
 // and might also read and write inbetween.
 procedure CS.Transaction(t: tid)
 {
-    var i: int;
-    var l: loc;
-    var v: val;
-    var b: bool;
-    #{if $ptrs then "var p: $ptr;" end}
+  var i: int;
+  var l: loc;
+  var v: val;
+  var b: bool;
     
-    #{beginOp().indent(4)}
+  #{beginOp().reindent(2)}
     
-    // An initial read operation.
-    assume {:yield} true;
-    #{readOp(cycle).indent(4)}
+  // An initial read operation.
+  assume {:yield} true;
+  #{readOp(cycle).reindent(2)}
     
-    while (#{if more_ops then "*" else "false" end}) {
-        if (*) {
-            // Another read operation..            
-            #{readOp(cycle).indent(12)}
-        } else {    
-            // Another write operation..
-            #{writeOp(cycle).indent(12)}
-        }
+  while (#{if more_ops then "*" else "false" end}) {
+    if (*) {
+      // Another read operation..            
+      #{readOp(cycle).reindent(6)}
+    } else {    
+      // Another write operation..
+      #{writeOp(cycle).reindent(6)}
     }
+  }
     
-    // A final write operation.
-    assume {:yield} true;
-    #{writeOp(cycle).indent(4)}
+  // A final write operation.
+  assume {:yield} true;
+  #{writeOp(cycle).reindent(2)}
 
-    // The commit operation.
-    assume {:yield} true;
-    #{commitOp(cycle).indent(4)}
+  // The commit operation.
+  assume {:yield} true;
+  #{commitOp(cycle).reindent(2)}
     
-    assume !CS.waiting[t];
-    return;
+  assume !CS.waiting[t];
+  return;
 }
 
 // Each thread performs a sequence of transactions.
-procedure #{inline()} CS.Thread(t: tid)
+procedure CS.Thread(t: tid)
 {
-    // a first transaction...
-    call CS.Transaction(t);
+  // a first transaction...
+  call CS.Transaction(t);
     
-    while (#{if more_txs then "*" else "false" end}) {
-        // ... and perhaps more transactions
-        call CS.Transaction(t);
-    }
-    return;
+  while (#{if more_txs then "*" else "false" end}) {
+    // ... and perhaps more transactions
+    call CS.Transaction(t);
+  }
+  return;
 }
 
-procedure #{inline()} {:entrypoint} Main()
+procedure {:entrypoint} Main()
 {
-    var t: tid where #{(1..cycle).to_a.map{|i| "t != T#{i}"}.join(" && ")};
-    
-    // no operation has yet started nor finished
-    #{idxs.map{|i| "assume !CS.started[#{i}];"}.join("\n\t")}
-    #{idxs.map{|i| "assume !CS.finished[#{i}];"}.join("\n\t")}
-    #{if $deferred then idxs.map{|i| "assume !CS.deferred[#{i}];"}.join("\n\t") end}
+  var t: tid where #{(1..cycle).to_a.map{|i| "t != T#{i}"}.join(" && ")};
+  
+  // no operation has yet started nor finished
+  #{idxs.map{|i| "assume !CS.started[#{i}];"}.join("\n  ")}
+  #{idxs.map{|i| "assume !CS.finished[#{i}];"}.join("\n  ")}
+  #{if $deferred then idxs.map{|i| "assume !CS.deferred[#{i}];"}.join("\n  ") end}
 
-    // no operations are yet waiting for their matching operation
-    assume #{(1..cycle).to_a.map{|i| "!CS.waiting[T#{i}]"}.join(" && ")};
-    
-    // Initialize the TM
-    call #{INIT_PROC}();
-    
-    #{if $uniqwrites then "uniq_val := 1;" end}
+  // no operations are yet waiting for their matching operation
+  assume #{(1..cycle).to_a.map{|i| "!CS.waiting[T#{i}]"}.join(" && ")};
+  
+  // Initialize the TM
+  call #{INIT_PROC}();
+  
+  #{if $uniqwrites then "uniq_val := 1;" end}
 
-    // Execute #{cycle} or more threads.
-    #{(1..cycle).to_a.map{|i| "call {:async} CS.Thread(T#{i});"}.join("\n\t")}
-    while (#{if more_thds then "*" else "false" end}) {
-        havoc t;
-        // Note: Corral seems to ignore the "where" clause above,
-        // so we add this redundant assume.
-        assume #{(1..cycle).to_a.map{|i| "t != T#{i}"}.join(" && ")};
-        #{if printing then "call {:leavealone} boogie_si_record_tid(t);" end}
-        call {:async} CS.Thread(t);
-    }
-    call {:async} CS.Check();
-    return;
+  // Execute #{cycle} or more threads.
+  #{(1..cycle).to_a.map{|i| "call {:async} CS.Thread(T#{i});"}.join("\n  ")}
+  while (#{if more_thds then "*" else "false" end}) {
+    havoc t;
+    // Note: Corral seems to ignore the "where" clause above,
+    // so we add this redundant assume.
+    assume #{(1..cycle).to_a.map{|i| "t != T#{i}"}.join(" && ")};
+    #{if printing then "call {:leavealone} boogie_si_record_tid(t);" end}
+    call {:async} CS.Thread(t);
+  }
+  call {:async} CS.Check();
+  return;
 }
 
 // check that all stages of the cycle have been encountered
-procedure #{inline()} CS.Check()
-{    
-    // allow this check to occur after the delays of other operations.
-    assume {:yield} true;    
-    
-    // all operations has started and finished
-    #{idxs.map{|i| "// assume CS.started[#{i}];"}.join("\n\t")}
-    #{idxs.map{|i| "assume CS.finished[#{i}];"}.join("\n\t")}
-    
-    // no operations are still waiting
-    // ToDo: I think this is redundant.
-    // assume #{(1..cycle).to_a.map{|i| "!CS.waiting[T#{i}]"}.join(" && ")};
-    
-    #{if printing then "
-    // print out lots of information
-    call {:leavealone} boogie_si_record_tid(T1);
-    call {:leavealone} boogie_si_record_tid(T2);
-    call {:leavealone} boogie_si_record_bool(false);
-    
-    #{idxs.map{|i|
-      "call {:leavealone} boogie_si_record_tid(CS.thread(#{i}));"
-    }.join("\n\t")}
-    
-    call {:leavealone} boogie_si_record_sep(s);    
-    
-    #{idxs.map{|i|
-      "call {:leavealone} boogie_si_record_bool(CS.started[#{i}]);"
-    }.join("\n\t")}
-    
-    call {:leavealone} boogie_si_record_sep(s);
-    
-    #{idxs.map{|i|
-      "call {:leavealone} boogie_si_record_bool(CS.finished[#{i}]);"
-    }.join("\n\t")}
-    
-    call {:leavealone} boogie_si_record_sep(s);
-    
-    #{idxs.map{|i|
-      "call {:leavealone} boogie_si_record_bool(CS.sametx(#{i}));"
-    }.join("\n\t")}
-    
-    call {:leavealone} boogie_si_record_sep(s);
-    
-    #{idxs.map{|i|
-      "call {:leavealone} boogie_si_record_bool(CS.concop(#{i}));"
-    }.join("\n\t")}
-    
-    call {:leavealone} boogie_si_record_sep(s);
-    
-    #{(1..cycle).to_a.map{|i|
-      "call {:leavealone} boogie_si_record_bool(CS.waiting[T#{i}]);"
-    }.join("\n\t")}
-    
-    call {:leavealone} boogie_si_record_sep(s);
-    
-    call {:leavealone} boogie_si_record_op(CS.READ);
-    call {:leavealone} boogie_si_record_op(CS.WRITE);
-    call {:leavealone} boogie_si_record_op(CS.COMMIT);
-    call {:leavealone} boogie_si_record_op(CS.ABORT);
-    
-    call {:leavealone} boogie_si_record_sep(s);
-    
-    #{idxs.map{|i|
-      "call {:leavealone} boogie_si_record_loc(CS.loc(#{i}));"
-    }.join("\n\t")}
-    
-    call {:leavealone} boogie_si_record_sep(s);
-    
-    #{idxs.map{|i|
-      "call {:leavealone} boogie_si_record_op(CS.op(#{i}));"
-    }.join("\n\t")}
-    
-    call {:leavealone} boogie_si_record_sep(s);    
-    
-    #{idxs.map{|i|
-      "call {:leavealone} boogie_si_record_val(CS.val(#{i}));"
-    }.join("\n\t")}"
-    end}
-
-    // if this point is reachable, the we've found a cycle
-    assert false;    
-    return;
+procedure CS.Check()
+{
+  // allow this check to occur after the delays of other operations.
+  assume {:yield} true;    
+  
+  // all operations has started and finished
+  #{idxs.map{|i| "// assume CS.started[#{i}];"}.join("\n  ")}
+  #{idxs.map{|i| "assume CS.finished[#{i}];"}.join("\n  ")}
+  
+  // no operations are still waiting
+  // ToDo: I think this is redundant.
+  // assume #{(1..cycle).to_a.map{|i| "!CS.waiting[T#{i}]"}.join(" && ")};    
+#{if printing then "
+  // print out lots of information
+  call {:leavealone} boogie_si_record_tid(T1);
+  call {:leavealone} boogie_si_record_tid(T2);
+  call {:leavealone} boogie_si_record_bool(false);
+  
+  #{idxs.map{|i|
+    "call {:leavealone} boogie_si_record_tid(CS.thread(#{i}));"
+  }.join("\n  ")}
+  
+  call {:leavealone} boogie_si_record_sep(s);    
+  
+  #{idxs.map{|i|
+    "call {:leavealone} boogie_si_record_bool(CS.started[#{i}]);"
+  }.join("\n  ")}
+  
+  call {:leavealone} boogie_si_record_sep(s);
+  
+  #{idxs.map{|i|
+    "call {:leavealone} boogie_si_record_bool(CS.finished[#{i}]);"
+  }.join("\n  ")}
+  
+  call {:leavealone} boogie_si_record_sep(s);
+  
+  #{idxs.map{|i|
+    "call {:leavealone} boogie_si_record_bool(CS.sametx(#{i}));"
+  }.join("\n  ")}
+  
+  call {:leavealone} boogie_si_record_sep(s);
+  
+  #{idxs.map{|i|
+    "call {:leavealone} boogie_si_record_bool(CS.concop(#{i}));"
+  }.join("\n  ")}
+  
+  call {:leavealone} boogie_si_record_sep(s);
+  
+  #{(1..cycle).to_a.map{|i|
+    "call {:leavealone} boogie_si_record_bool(CS.waiting[T#{i}]);"
+  }.join("\n  ")}
+  
+  call {:leavealone} boogie_si_record_sep(s);
+  
+  call {:leavealone} boogie_si_record_op(CS.READ);
+  call {:leavealone} boogie_si_record_op(CS.WRITE);
+  call {:leavealone} boogie_si_record_op(CS.COMMIT);
+  call {:leavealone} boogie_si_record_op(CS.ABORT);
+  
+  call {:leavealone} boogie_si_record_sep(s);
+  
+  #{idxs.map{|i|
+    "call {:leavealone} boogie_si_record_loc(CS.loc(#{i}));"
+  }.join("\n  ")}
+  
+  call {:leavealone} boogie_si_record_sep(s);
+  
+  #{idxs.map{|i|
+    "call {:leavealone} boogie_si_record_op(CS.op(#{i}));"
+  }.join("\n  ")}
+  
+  call {:leavealone} boogie_si_record_sep(s);    
+  
+  #{idxs.map{|i|
+    "call {:leavealone} boogie_si_record_val(CS.val(#{i}));"
+  }.join("\n  ")}"
+end}
+  // if this point is reachable, the we've found a cycle
+  assert false;    
+  return;
 }
   xxx
 end
