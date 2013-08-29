@@ -64,18 +64,16 @@ DEST_MAN = @mandir@
 
 CAML_LIB = lib$(NAME)
 CAML_LIB_OBJ = \
-	Prelude PrettyPrinting \
-	Options ParsingUtils \
-	Cfg CfgParser CfgLexer \
-	PnAst PnParser PnLexer \
+	Prelude PrettyPrinting ParsingUtils \
+	BplAst BplParser BplLexer BplUtils BplMarkers \
+    BplInitAxioms \
+    BplWrapEntrypoints BplYieldElimination BplAsyncToSeq BplAsserts BplBackend 
+    
+DEPRICATED_LIB_OBJ = \
+	Cfg CfgParser CfgLexer Parikh \
+	PnAst PnParser PnLexer PnToBpl \
 	BpAst BpParser BpLexer BpUtils \
-	BplAst BplParser BplLexer BplUtils BplSeqFramework \
-	Parikh \
-	BplViolin \
-	PnToBpl \
-	BplEscAsync BplFifoSeq \
-	BplAsyncToSeq \
-	BplMultiToSingle
+	BplEscAsync BplFifoSeq BplMultiToSingle BplViolin
 
 SOURCES = $(shell find $(SRC) $(OBJDIR) -name "*.ml" -or -name "*.mli")
 CMOFILES = $(addprefix $(OBJDIR)/, $(addsuffix .cmo, $(CAML_LIB_OBJ)))
