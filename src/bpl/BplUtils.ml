@@ -56,7 +56,8 @@ module Statement = struct
     function
     | Assume (ax,_) | Assert (ax,_) | Call (ax,_,_,_) -> ax
     | _ -> []
-  let has_attr a  = List.mem_assoc a << attrs
+  let has_attr a = List.mem_assoc a << attrs
+  let get_attr a = Tup2.make a << List.assoc a << attrs
   let strip a =
     function
     | Assume (ax,e) -> Assume (A.strip a ax, e)
@@ -82,6 +83,7 @@ module rec LabeledStatementExt : sig
   
   val attrs : t -> Attribute.t list
   val has_attr : Identifier.t -> t -> bool
+  val get_attr : Identifier.t -> t -> Attribute.t
   val strip : Identifier.t -> t -> t
   
   val incr : ?labels:Identifier.t list -> Expression.t -> int -> t
@@ -133,6 +135,7 @@ end = struct
   
   let attrs = S.attrs << snd
   let has_attr a = S.has_attr a << snd
+  let get_attr a = S.get_attr a << snd
   let strip a = Tup2.map id (S.strip a)
   
 	let incr ?labels:ls e i = 

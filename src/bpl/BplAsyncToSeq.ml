@@ -89,53 +89,14 @@ let async_to_seq pgm =
     )) async_calls
   in
         
-  let stmt s = 
-    if Ls.has_attr M.begin_seq s then begin
-      [ Ls.havoc guess_gs ]
-      @ ( next_gs $::=$ guess_gs )
-      @ (E.ident seq_idx |:=| E.num 0)
-      @ [s]
-    end
+  let begin_seq_code =
+    [ Ls.havoc guess_gs ]
+    @ ( next_gs $::=$ guess_gs )
+    @ (E.ident seq_idx |:=| E.num 0)
 
-    else if Ls.has_attr M.end_seq s then begin
-      [s]
-      @ List.map (fun g -> Ls.assume (g $=$ guess g)) gs
-      @ ( gs $::=$ next_gs )
-    end
-
-    else match s with
-
-		| ls, S.Call (ax,n,ps,rs) when A.has M.async ax ->
-			if rs <> [] then
-				warn "Found async call (to procedure `%s') with assignments." n;
-			
-			Ls.add_labels ls (
-        (* Map global variables in argument expressions 
-        * to their "saved" values *)
-        let ps = List.map (E.map (fun e -> 
-          match e with
-          | E.Id x when List.mem x gs -> E.Id (save x)
-          | _ -> e
-        )) ps 
-        in 
-        
-        match style with
-        | SeparateProc ->
-          [Ls.call ~attrs:(A.strip M.async ax) (async n) ~params:ps ~returns:rs]
-          
-        | AtCallsite -> begin
-          pause_segment
-          @ begin_segment
-  	      @ [Ls.call ~attrs:[] n ~params:(ps@[E.ident seq_idx]) ~returns:rs]
-          @ end_segment
-          @ resume_segment
-        end)
-
-    (* Pass along the sequentialization index. *)
-		| ls, S.Call (ax,n,ps,rs) when not (A.has M.leavealone ax) ->      
-			[ ls, S.Call (ax, n, ps@[E.ident seq_idx], rs)]
-
-		| _ -> [s]
+  and end_seq_code =
+    List.map (fun g -> Ls.assume (g $=$ guess g)) gs
+    @ ( gs $::=$ next_gs )
   in
 		
 	if List.length gs = 0 then
@@ -169,5 +130,42 @@ let async_to_seq pgm =
           else if A.has M.entrypoint ax then guess_decls
           else [])
 
-      ~per_stmt_map: (const stmt)
+      ~per_stmt_map: (const <| function
+        | s when Ls.has_attr M.begin_seq s -> begin_seq_code @ [s]
+        | s when Ls.has_attr M.end_seq s -> s :: end_seq_code
+
+    		| ls, S.Call (ax,n,ps,rs) when A.has M.async ax ->
+    			if rs <> [] then
+    				warn "Found async call (to procedure `%s') with assignments." n;
+			
+    			Ls.add_labels ls (
+            (* Map global variables in argument expressions 
+            * to their "saved" values *)
+            let ps = List.map (E.map (fun e -> 
+              match e with
+              | E.Id x when List.mem x gs -> E.Id (save x)
+              | _ -> e
+            )) ps 
+            in 
+        
+            match style with
+            | SeparateProc ->
+              [Ls.call ~attrs:(A.strip M.async ax) (async n) ~params:ps ~returns:rs]
+          
+            | AtCallsite -> begin
+              pause_segment
+              @ begin_segment
+      	      @ [Ls.call ~attrs:[] n ~params:(ps@[E.ident seq_idx]) ~returns:rs]
+              @ end_segment
+              @ resume_segment
+            end)
+
+        (* Pass along the sequentialization index. *)
+    		| ls, S.Call (ax,n,ps,rs) when not (A.has M.leavealone ax) ->      
+    			[ ls, S.Call (ax, n, ps@[E.ident seq_idx], rs)]
+
+    		| s -> [s]
+      )
       pgm
+      
+

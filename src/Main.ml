@@ -61,6 +61,12 @@ let rec commands : command list = [
     | _ -> assert false
   );
 
+  "async-to-seq-wait", ("async-to-sequential call translation w/ wait", [], 
+  function [] ->
+    BplAsyncWithWait.async_to_seq
+    | _ -> assert false
+  );
+
   "prepare", ("prepare code for verifier (Boogie-SI or Boogie-FI)", [S "BACK-END"], 
   function 
     | [S "Boogie-SI"] -> BplBackend.for_boogie_si

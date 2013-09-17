@@ -67,7 +67,8 @@ CAML_LIB_OBJ = \
 	Prelude PrettyPrinting ParsingUtils \
 	BplAst BplParser BplLexer BplUtils BplMarkers \
     BplInitAxioms \
-    BplWrapEntrypoints BplYieldElimination BplAsyncToSeq BplAsserts BplBackend 
+    BplWrapEntrypoints BplYieldElimination BplAsyncToSeq BplAsyncWithWait \
+		BplAsserts BplBackend 
     
 DEPRICATED_LIB_OBJ = \
 	Cfg CfgParser CfgLexer Parikh \

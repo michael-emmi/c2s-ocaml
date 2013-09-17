@@ -55,101 +55,55 @@ let delay_bounding rounds delays pgm =
 	and vectorize_expr = function
 	| E.Id x when List.mem x gs -> E.sel (E.ident x) [E.ident round_idx]
 	| e -> e
-	in  
-      	
-	let new_decls = 
-    List.map (D.add (A.unit M.leavealone)) (
-      List.map (D.to_const << D.rename init << vectorize_var_decl) gs_decls 
-      @ [ D.const rounds_const T.Int ;
-          D.axiom (E.ident rounds_const |=| E.num rounds) ;
-          D.const delays_const T.Int ;
-          D.axiom (E.ident delays_const |=| E.num delays) ;
-          D.var delays_var T.Int ;
-          D.var ignore_round_idx T.Int ;
-      ]) in	
-      
-  let stmt s =
-    if Ls.has_attr M.begin_seq s then begin
-      (E.ident delays_var |:=| E.num 0)
-      @ (E.ident round_idx |:=| E.num 0)
-      @ print_val (rounds_const)
-      @ print_val (delays_const)
-      @ (gs $::=$ List.map init gs)
-      @ [s]
-    end
+  
+  and jump_fixed e i = 
+    Ls.ifthenelse ([
+      Ls.assume ~labels:[delay_label ()] (Option.reduce id (E.bool true) e);
+			Ls.assume (E.ident round_idx |+| E.num i |<| E.ident rounds_const);
+			Ls.assume (E.ident delays_var |+| E.num i |<=| E.ident delays_const);
+			Ls.incr (E.ident round_idx) i;
+			Ls.incr (E.ident delays_var) i]
+      @ print_val round_idx
+    )
+
+  and jump_range e i k = 
+    Ls.ifthenelse ([
+      Ls.assume ~labels:[delay_label ()] (Option.reduce id (E.bool true) e);
+      Ls.havoc [jump_var];
+      Ls.assume (E.ident jump_var |>=| E.num (Option.reduce id 1 i));
+      Ls.assume (Option.reduce (fun k -> E.ident jump_var |<=| E.num k) 
+          (E.bool true) k);
+      Ls.assume (E.ident round_idx |+| E.ident jump_var |<| E.ident rounds_const);
+      Ls.assume (E.ident delays_var |+| E.ident jump_var |<=| E.ident delays_const);
+
+      Ls.assign [Lv.from_expr <| E.ident round_idx] [E.ident round_idx |+| E.ident jump_var];
+      Ls.assign [Lv.from_expr <| E.ident delays_var] [E.ident delays_var |+| E.ident jump_var]]
+      @ print_val round_idx
+    )
+  
+  and begin_seq_code = 
+    (E.ident delays_var |:=| E.num 0)
+    @ (E.ident round_idx |:=| E.num 0)
+    @ print_val (rounds_const)
+    @ print_val (delays_const)
+    @ (gs $::=$ List.map init gs)
     
-    else if Ls.has_attr M.end_seq s then begin
-      [s]
-      @ ( List.flatten << List.map 
-        (fun i -> 
-          List.map 
-            (fun g -> 
-              Ls.assume (
-                E.sel (E.ident g) [E.num (i-1)] 
-                |=| E.sel (E.ident <| init g) [E.num (i)] ))
-              gs )
-        (* Note: technically this should go from 1 to (rounds-1).
-           However, Boogie for some strange reason will not take our
-           generated program when there these constraints are completely
-           absent -- i.e. when rounds < 2. *)
-        <| List.range 1 (rounds) )
-    end
-
-    else if Ls.is_yield s then      
-      let jump_fixed e i = 
-        Ls.ifthenelse ([
-          Ls.assume ~labels:[delay_label ()] (Option.reduce id (E.bool true) e);
-  				Ls.assume (E.ident round_idx |+| E.num i |<| E.ident rounds_const);
-  				Ls.assume (E.ident delays_var |+| E.num i |<=| E.ident delays_const);
-  				Ls.incr (E.ident round_idx) i;
-  				Ls.incr (E.ident delays_var) i]
-          @ print_val round_idx
-        )
-
-      and jump_range e i k = 
-        Ls.ifthenelse ([
-          Ls.assume ~labels:[delay_label ()] (Option.reduce id (E.bool true) e);
-          Ls.havoc [jump_var];
-          Ls.assume (E.ident jump_var |>=| E.num (Option.reduce id 1 i));
-          Ls.assume (Option.reduce (fun k -> E.ident jump_var |<=| E.num k) 
-              (E.bool true) k);
-          Ls.assume (E.ident round_idx |+| E.ident jump_var |<| E.ident rounds_const);
-          Ls.assume (E.ident delays_var |+| E.ident jump_var |<=| E.ident delays_const);
-
-          Ls.assign [Lv.from_expr <| E.ident round_idx] [E.ident round_idx |+| E.ident jump_var];
-          Ls.assign [Lv.from_expr <| E.ident delays_var] [E.ident delays_var |+| E.ident jump_var]]
-          @ print_val round_idx
-        )
-      in
-      match A.get "yield" (Ls.attrs s) with
-      | [Left (E.Lit (Literal.Num i))] -> 
-        [ jump_fixed None i ]
-
-      | [Left (E.Lit (Literal.Num i)); Left (E.Lit (Literal.Num k))] -> 
-        [ jump_range None (Some i) (Some k) ]
-
-      | [Left e] ->
-        [ jump_range (Some e) None None ]
-          
-      | [Left e; Left (E.Lit (Literal.Num i))] -> 
-        [ jump_fixed (Some e) i ]
-
-      | [Left e; Left (E.Lit (Literal.Num i)); Left (E.Lit (Literal.Num k))] ->
-        [ jump_range (Some e) (Some i) (Some k) ]
-        
-      | _ -> [ jump_range None None None ]
-          
-    else match s with
-		| ls, S.Call (ax,n,ps,rs) when not (A.has M.leavealone ax)->
-			[ ls, S.Call (ax, n, ps@[E.ident round_idx],
-        if A.has M.noyields ax then rs 
-        else if A.has M.async ax then rs@[ignore_round_idx]
-        else rs@[round_idx]
-      )]
-      
-		| _ -> [s]
+  and end_seq_code = 
+    List.flatten << List.map 
+      (fun i -> 
+        List.map 
+          (fun g -> 
+            Ls.assume (
+              E.sel (E.ident g) [E.num (i-1)] 
+              |=| E.sel (E.ident <| init g) [E.num (i)] ))
+            gs )
+      (* Note: technically this should go from 1 to (rounds-1).
+         However, Boogie for some strange reason will not take our
+         generated program when there these constraints are completely
+         absent -- i.e. when rounds < 2. *)
+      <| List.range 1 (rounds)
   in
-	
+  
 	if List.length gs = 0 then pgm
 	else begin
 		id    
@@ -199,7 +153,15 @@ let delay_bounding rounds delays pgm =
 
       ~ignore_attrs: [M.leavealone]
 
-      ~prepend_global_decls: new_decls
+      ~prepend_global_decls: (List.map (D.add (A.unit M.leavealone)) (
+        D.const rounds_const T.Int
+        :: D.axiom (E.ident rounds_const |=| E.num rounds)
+        :: D.const delays_const T.Int
+        :: D.axiom (E.ident delays_const |=| E.num delays)
+        :: D.var delays_var T.Int
+        :: D.var ignore_round_idx T.Int
+        :: List.map (D.to_const << D.rename init << vectorize_var_decl) gs_decls))
+
 			~replace_global_decls: (fun d -> vectorize_var_decl d :: [])
 
 			~new_proc_params: 
@@ -228,7 +190,38 @@ let delay_bounding rounds delays pgm =
             @ print_val init_round_idx
           end)
           
-      ~per_stmt_map: (const stmt)
+      ~per_stmt_map: (const <| function
+        | s when Ls.has_attr M.begin_seq s -> begin_seq_code @ [s]    
+        | s when Ls.has_attr M.end_seq s -> s :: end_seq_code
+        | s when Ls.is_yield s -> begin
+
+          (* Conditionless yield *)
+          match A.get "yield" (Ls.attrs s) with
+          | Left (E.Lit (Literal.Num i)) :: [] -> jump_fixed None i :: []
+          | Left (E.Lit (Literal.Num i)) :: Left (E.Lit (Literal.Num k)) :: [] -> 
+            jump_range None (Some i) (Some k) :: []
+
+          (* Conditional yield *)
+          | Left e :: [] -> jump_range (Some e) None None :: []          
+          | Left e :: Left (E.Lit (Literal.Num i)) :: [] -> jump_fixed (Some e) i :: []
+          | Left e :: Left (E.Lit (Literal.Num i)) :: Left (E.Lit (Literal.Num k)) :: [] ->
+            jump_range (Some e) (Some i) (Some k) :: []
+        
+          | _ -> jump_range None None None :: []
+        end
+
+    		| ls, S.Call (ax,n,ps,rs) when not (A.has M.leavealone ax) -> begin
+
+          (* Pass the round index through calls. *)
+    			(ls, S.Call (ax, n, ps@[E.ident round_idx],
+            if A.has M.noyields ax then rs 
+            else if A.has M.async ax then rs@[ignore_round_idx]
+            else rs@[round_idx])) :: []
+        end
+      
+    		| s -> s :: []
+      
+      )
 			~per_expr_map: (const vectorize_expr)
       
     (* Prevent bodiless procedures from possibly yielding. *)
