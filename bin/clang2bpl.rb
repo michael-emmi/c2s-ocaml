@@ -3,6 +3,7 @@
 require 'colorize'
 require 'optparse'
 require 'ostruct'
+require_relative 'prelude'
 
 $MYVERSION = "0.2"
 
@@ -77,37 +78,15 @@ def translate_clang_to_bpl(sources, options)
   return bpl
 end
 
-# if this script is executing...
-if __FILE__ == $0 then
-
-  options = {}
-
-  OptionParser.new do |opts|
-    options = OpenStruct.new
+def clang2bpl_options(opts, options)
     options.outfile = nil
     options.clang = []
     options.smack = ["-mem-mod-impls"]
   
-    opts.banner = "usage: #{File.basename $0} CLANG-SOURCES [options]"
-  
     opts.on("-o", "--output-file FILE", "Specify the output file name") do |f|
       options.outfile = f
     end
-  
-    opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
-      options.verbose = v
-      options.quiet = !v
-    end
-  
-    opts.on("-q", "--[no-]quiet", "Run very quietly") do |q|
-      options.quiet = q
-      options.verbose = !q
-    end
-
-    opts.on("-k", "--[no-]keep-files", "Don't delete intermediate files") do |v|
-      options.keep = v
-    end
-  
+    
     opts.separator ""
     opts.separator "Clang options:"
 
@@ -136,20 +115,19 @@ if __FILE__ == $0 then
   
     opts.on("--[no-]memory-model-asserts", "Enable memory model assertions") do |m|
       options.smack << "-no-mem-mod-asserts" unless m
-    end
-  
-    opts.separator ""
-    opts.separator "Generic options:"
-  
-    opts.on_tail("-h", "--help", "Show this message") do
-      puts opts
-      exit
-    end
+    end      
+end
 
-    opts.on_tail("--version", "Show version") do
-      puts "#{File.basename $0} version #{$MYVERSION}"
-      exit
-    end
+# if this script is executing...
+if __FILE__ == $0 then
+
+  options = {}
+
+  OptionParser.new do |opts|
+    options = OpenStruct.new
+    opts.banner = "usage: #{File.basename $0} SOURCE [options]"
+    standard_options(opts, options)
+    clang2bpl_options(opts, options)
   end.parse!
 
   # the rest of the command line in ARGV

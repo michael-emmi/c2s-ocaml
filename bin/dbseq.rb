@@ -27,6 +27,27 @@ def delay_bounding_seqentialization(src, options)
   return seq
 end
 
+def dbseq_options(opts, options)
+  options.c2s = []
+  options.rounds = 1
+  options.delays = 0
+
+  opts.separator ""
+  opts.separator "Sequentialization options:"
+
+  opts.on("-r", "--rounds MAX", Integer, "The rounds bound (default 1)") do |r|
+    options.rounds = r 
+  end
+
+  opts.on("-d", "--delays MAX", Integer, "The delay bound (default 0)") do |d|
+    options.delays = d 
+  end
+  
+  opts.on("-g", "--graph-of-trace", "generate a trace graph") do |g|
+    options.graph = g
+  end
+end
+
 # if this script is executing...
 if __FILE__ == $0 then
   
@@ -34,66 +55,10 @@ if __FILE__ == $0 then
 
   OptionParser.new do |opts|
     options = OpenStruct.new
-    options.c2s = []
-    options.verifier = "Boogie-SI"
-    options.boogie = []
-    options.rounds = 1
-    options.delays = 0
-  
     opts.banner = "usage: #{File.basename $0} SOURCE [options]"
-  
-    opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
-      options.verbose = v
-      options.quiet = !v
-    end
-  
-    opts.on("-q", "--[no-]quiet", "Run very quietly") do |q|
-      options.quiet = q
-      options.verbose = !q
-    end
-
-    opts.on("-k", "--[no-]keep-files", "Don't delete intermediate files") do |v|
-      options.keep = v
-    end
-
-    opts.on("-g", "--graph-of-trace", "generate a trace graph") do |g|
-      options.graph = g
-    end
-  
-    opts.separator ""
-    opts.separator "Sequentialization options:"
-
-    opts.on("-r", "--rounds MAX", Integer, "The rounds bound (default 1)") do |r|
-      options.rounds = r 
-    end
-  
-    opts.on("-d", "--delays MAX", Integer, "The delay bound (default 0)") do |d|
-      options.delays = d 
-    end
-  
-    opts.separator ""
-    opts.separator "Verifier options:"
-    
-    opts.on("--verifier NAME", String, ["Boogie-SI", "Boogie-FI"], "The verification engine") do |v|
-      options.verifier = v
-    end
-
-    opts.on("-b", "--recursion-bound MAX", Integer, "The recursion bound (default ??)") do |r|
-      options.boogie << "/recursionBound:#{r}"
-    end
-  
-    opts.separator ""
-    opts.separator "Generic options:"
-  
-    opts.on_tail("-h", "--help", "Show this message") do
-      puts opts
-      exit
-    end
-
-    opts.on_tail("--version", "Show version") do
-      puts "#{File.basename $0} version #{$MYVERSION}"
-      exit
-    end
+    standard_options(opts, options)
+    dbseq_options(opts, options)
+    verify_options(opts, options)
   end.parse!
 
   # the rest of the command line

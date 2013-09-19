@@ -76,3 +76,19 @@ def verify_with_boogie_fi(src, options)
   end 
   File.delete( *cleanup ) unless options.keep
 end
+
+def verify_options(opts, options)
+  options.verifier = "Boogie-SI"
+  options.boogie = []
+
+  opts.separator ""
+  opts.separator "Verifier options:"
+  
+  opts.on("--verifier NAME", String, ["Boogie-SI", "Boogie-FI"], "The verification engine") do |v|
+    options.verifier = v
+  end
+
+  opts.on("-b", "--recursion-bound MAX", Integer, "The recursion bound (default ??)") do |r|
+    options.boogie << "/recursionBound:#{r}"
+  end
+end
