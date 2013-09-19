@@ -625,7 +625,7 @@ end = struct
 		
 	let fold_stmts fn a = fst << map_fold_stmts (fun a s -> fn a s, [s]) a
 	
-	let contains_rec p = fold_stmts (fun b s -> b or p s) false
+	let contains_rec p = fold_stmts (fun b s -> b || p s) false
 						
 	let map_fold_exprs fn a (ls,s) =
 		let a, s = Statement.map_fold_exprs fn a s in

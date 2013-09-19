@@ -1,13 +1,4 @@
-SHELL = @SHELL@
-DEBUG = 1
-
-C_C = @CC@
-CPP_C = @CXX@
-
-CAML_C = @OCAMLC@
-CAML_OPT_C = @OCAMLCDOTOPT@
-CAML_LD = @OCAMLC@
-CAML_OPT_LD = @OCAMLCDOTOPT@
+include Makefile.config
 
 CAML_C_FLAGS = -dtypes -warn-error A -I $(OBJDIR)
 CAML_OPT_C_FLAGS = -unsafe -noassert -I $(OBJDIR)
@@ -34,12 +25,6 @@ CAML_LD_FLAGS += -g
 CAML_OPT_LD_FLAGS += -g
 endif
 
-CAML_DEP = @OCAMLDEP@
-CAML_LEX = @OCAMLLEX@
-CAML_YACC = @OCAMLYACC@ -v
-CAML_FIND = @OCAMLFIND@
-
-NAME := @PACKAGE_NAME@
 SRC := src
 TARBALL := $(NAME)-$$(date "+%m-%d-%Y").tar.gz
 
@@ -55,20 +40,13 @@ DOCDIR := doc
 LIBDIR := lib
 INCDIR := include
 
-prefix = @prefix@
-exec_prefix = @exec_prefix@
-DEST_BIN = @bindir@
-DEST_INC = @includedir@
-DEST_LIB = @libdir@
-DEST_MAN = @mandir@
-
 CAML_LIB = lib$(NAME)
 CAML_LIB_OBJ = \
 	Prelude PrettyPrinting ParsingUtils \
 	BplAst BplParser BplLexer BplUtils BplMarkers \
-    BplInitAxioms \
-    BplWrapEntrypoints BplYieldElimination BplAsyncToSeq BplAsyncWithWait \
-		BplAsserts BplBackend 
+  BplInitAxioms \
+  BplWrapEntrypoints BplYieldElimination BplAsyncToSeq BplAsyncWithWait \
+	BplAsserts BplBackend 
     
 DEPRICATED_LIB_OBJ = \
 	Cfg CfgParser CfgLexer Parikh \
@@ -111,9 +89,7 @@ TOOLS =
 
 TODO = $(TOOLS) exe
 
-INSTALL=install
-INSTALL_DATA = @INSTALL_DATA@
-INSTALL_PROGRAM = @INSTALL_PROGRAM@
-INSTALL_SCRIPT = @INSTALL_SCRIPT@
-
 include Makefile.rules
+
+distclean:: clean
+	rm -f Makefile.config

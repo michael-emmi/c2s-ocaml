@@ -7,6 +7,6 @@ bin/c2s.exe
 *.output
 *.async.bpl
 *.tmproj
-Makefile
+Makefile.config
 autom4te*
 config.*

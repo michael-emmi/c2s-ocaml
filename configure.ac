@@ -50,5 +50,6 @@ AC_CHECK_LIB([inkpkg], [main])
 
 # Checks for library functions.
 
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES(Makefile.config)
+
 AC_OUTPUT

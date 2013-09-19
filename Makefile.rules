@@ -32,9 +32,6 @@ install: exe
 	$(ECHO)for s in $$(find $(BINDIR) -name '*.rb'); do \
     $(INSTALL_SCRIPT) $$s $(DEST_BIN) ; \
 	done
-	$(ECHO)for s in $$(find $(LIBDIR) -name '*.rb'); do \
-    $(INSTALL_SCRIPT) $$s $(DEST_LIB) ; \
-	done
 	
 uninstall:
 	@$(NARRATIVE) Uninstalling $(NAME)
@@ -42,12 +39,8 @@ uninstall:
 	$(ECHO)for s in $$(find $(BINDIR) -name '*.rb'); do \
     rm -f $(DEST_BIN)/$$(basename $$s) ; \
 	done
-	$(ECHO)for s in $$(find $(LIBDIR) -name '*.rb'); do \
-    rm -f $(DEST_LIB)/$$(basename $$s) ; \
-	done
 
 clean: default-clean
-distclean: clean
 	@rm -rf *.cmi *.annot $(TODO)
 	@rm -rf $(OBJDIR) $(DOCDIR) $(TESTLOGS)
 	@rm -f $(BINDIR)/$(CAML_TPL_EXE) $(BINDIR)/$(CAML_EXE) $(TARBALL)
