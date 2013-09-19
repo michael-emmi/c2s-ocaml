@@ -31,7 +31,7 @@ let asserts_to_error_flag ?(no_asserts = false) pgm =
     (* Initialize the error flag to false. *)
     ~proc_body_prefix: (fun (ax,_,_) -> 
       if A.has "entrypoint" ax
-      then (E.ident err_flag |:=| E.bool false)
+      then [E.ident err_flag |:=| E.bool false]
       else []
     )
 
@@ -46,7 +46,7 @@ let asserts_to_error_flag ?(no_asserts = false) pgm =
     ~per_stmt_map: (fun n s -> 
       match s with
       | ls, S.Assert ([],e) ->
-        Ls.add_labels ls (E.ident err_flag |:=| (E.ident err_flag ||| (E.negate e)))
+        Ls.add_labels ls [E.ident err_flag |:=| (E.ident err_flag ||| (E.negate e))]
       | _ -> [s] 
     )
 

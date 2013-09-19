@@ -19,7 +19,7 @@ let ensure_si_procedures p =
     let t = Type.t (Str.matched_group 1 n) in
     info "Adding missing procedure declaration `%s'." n;
     D.Proc ([A.unit "leavealone"],n,([],["x",t],[],[],None)) )
-  << List.filter (fun n -> Program.find_proc p n = [])
+  << List.filter (fun n -> try ignore (Program.find_proc n p); false with _ -> true)
   << Program.fold_stmts (fun cs -> 
       function 
       | (_,Statement.Call (_,n,_,_)) when Str.string_match boogie_si_regexp n 0 ->
@@ -27,7 +27,7 @@ let ensure_si_procedures p =
       | _ -> cs ) []
   <| p    
   
-let for_boogie_si = 
+let for_boogie_si =
   check_for_assertions
   << (fun p -> Program.map_procs (ProcedureExt.fix_modifies p) p)
   << BplAsserts.asserts_to_error_flag ~no_asserts:true

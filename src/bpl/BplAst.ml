@@ -701,10 +701,12 @@ module rec Procedure : sig
 			* (Declaration.t list * LabeledStatement.t list) option
 
 	val signature : t -> Type.t list * Type.t list
+  val params : t -> (Identifier.t * Type.t) list
+  val returns : t -> (Identifier.t * Type.t) list
 	val stmts : t -> LabeledStatement.t list
   
   val has_impl : t -> bool
-
+  
 	val map_fold_exprs : ('a -> Expression.t -> 'a * Expression.t) -> 'a -> t -> 'a * t
 	val map_exprs : (Expression.t -> Expression.t) -> t -> t
   val exists_expr : (Expression.t -> bool) -> t -> bool
@@ -726,6 +728,8 @@ end = struct
 	module Ls = LabeledStatement
 
 	let signature (_,ps,rs,_,_) = List.map snd ps, List.map snd rs
+  let params (_,ps,_,_,_) = ps
+  let returns (_,_,rs,_,_) = rs
 	let stmts (_,_,_,_,bd) = Option.list <| Option.map snd bd
   
   let has_impl (_,_,_,_,bd) = bd <> None
@@ -825,6 +829,8 @@ and Declaration : sig
 	val rename : (Identifier.t -> Identifier.t) -> t -> t
 	val kind : t -> kind
 	val to_const : t -> t
+  
+  val to_id_type : t -> Identifier.t * Type.t
 
 	val to_string : t -> string
 	val print : t -> PrettyPrinting.doc
@@ -929,6 +935,10 @@ end = struct
 		| Var (ax,n,t,e) ->
 			Const (ax,false,n,t,())
 		| d -> d
+		
+	let to_id_type = function
+		| Var (_,n,t,_) -> n, t
+		| _ -> invalid_arg "Declaration.to_id_type"
     
 	open PrettyPrinting
 			  

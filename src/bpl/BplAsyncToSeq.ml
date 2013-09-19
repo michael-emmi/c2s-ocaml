@@ -58,13 +58,12 @@ let async_to_seq pgm =
     | SeparateProc -> begin
       Pg.fold_stmts (fun cs s -> 
         match s with
-        | _, S.Call (ax,n,_,_) when A.has M.async ax && not (List.mem_assoc n cs) -> 
-          begin match Pg.find_proc pgm n with
-          | [_,ps,rs,_,_] -> 
-            (n,(ps,rs))::cs
-          | _ -> 
-    				warn "Cannot resolve call to procedure `%s'." n;
-            cs
+        | _, S.Call (ax,n,_,_) when A.has M.async ax && not (List.mem_assoc n cs) ->
+          begin
+            try let (_,ps,rs,_,_) = Pg.find_proc n pgm in (n,(ps,rs))::cs
+            with Not_found -> 
+              warn "Cannot resolve call to procedure `%s'." n;
+              cs
           end
         | _ -> cs) [] pgm
     end
@@ -90,13 +89,13 @@ let async_to_seq pgm =
   in
         
   let begin_seq_code =
-    [ Ls.havoc guess_gs ]
-    @ ( next_gs $::=$ guess_gs )
-    @ (E.ident seq_idx |:=| E.num 0)
+    Ls.havoc guess_gs
+    :: (E.ident seq_idx |:=| E.num 0)
+    :: (next_gs $::=$ guess_gs)
 
   and end_seq_code =
     List.map (fun g -> Ls.assume (g $=$ guess g)) gs
-    @ ( gs $::=$ next_gs )
+    @ (gs $::=$ next_gs)
   in
 		
 	if List.length gs = 0 then

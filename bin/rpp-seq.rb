@@ -14,11 +14,11 @@ def c2s()
 end
 
 def delay_bounding_seqentialization(src, options)
-  seq = "#{File.basename(src,'.bpl')}.EQR.#{options.rounds}.#{options.delays}.bpl"
+  seq = "#{File.basename(src,'.bpl')}.RPPSEQ.#{options.rounds}.#{options.delays}.bpl"
   puts "* c2s: #{src} => #{seq.blue}" unless options.quiet
   cmd = "#{c2s()} load #{src} seq-framework " \
     "delay-bounding #{options.rounds} #{options.delays} " \
-    "async-to-seq-dfs " \
+    "async-to-seq-wait " \
     "prepare #{options.verifier} " \
     "strip-internal-markers " \
     "print #{seq}"

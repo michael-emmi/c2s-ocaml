@@ -175,11 +175,15 @@ end = struct
   let incomplete_calls pgm = 
   	List.map fst
   	<< List.filter (uncurry (<>) << Tup2.map List.length List.length)
-    << List.flatten    
+    << Option.cat
     << List.map 
-      ( fun (n,_,ys) ->         
-        List.map (Tup2.ekam ys << snd << Procedure.signature) 
-        <| ProgramExt.find_proc pgm n
+      ( fun (n,_,ys) ->
+        try Some (
+        Tup2.ekam ys 
+        << snd 
+        << Procedure.signature 
+        << ProgramExt.find_proc n 
+        <| pgm) with _ -> None
       )
   	<< calls
 	
@@ -189,8 +193,8 @@ end = struct
     let ignore_var_name i =	sprintf "__ignore_%n_%s" i << Type.stringify in  
   	match s with
     | ls, Statement.Call (ax,n,es,xs) -> begin
-      match ProgramExt.find_proc pgm n with
-      | p::_ -> begin
+      try 
+        let p = ProgramExt.find_proc n pgm in
         let _, ts = Procedure.signature p in
         if List.length xs = List.length ts 
           then [s]
@@ -200,8 +204,7 @@ end = struct
           warn "Missing return assignments for `%s'; attempting to add them." n;
           [ ls, Statement.Call (ax,n,es,List.mapi ignore_var_name ts) ]
         end
-      end
-      | _ -> begin
+      with Not_found -> begin
         warn "Unable to resolve procedure `%s'." n; 
         [s]
       end
@@ -305,11 +308,15 @@ and ProgramExt : sig
   
   type proc_ctx = Attribute.t list * Identifier.t * Procedure.t
   val fold_over_calls : t -> ('a -> Procedure.t -> 'a) -> 'a -> LabeledStatement.t list -> 'a
-  val find : t -> Identifier.t -> Declaration.t list
-  val find_proc : t -> Identifier.t -> Procedure.t list
 
-  val is_declared : t -> string -> bool
-  val is_defined : t -> string -> bool
+  val filter : (Declaration.t -> bool) -> t -> Declaration.t list
+  val find : (Declaration.t -> bool) -> t -> Declaration.t
+  val find_all : (Declaration.t -> bool) -> t -> Declaration.t list
+  val find_decl : Identifier.t -> t -> Declaration.t
+  val find_proc : Identifier.t -> t -> Procedure.t
+
+  val is_declared : string -> t -> bool
+  val is_defined : string -> t -> bool
   
   val add_inline_attribute : ?ignore_attrs: string list -> t -> t
   
@@ -337,31 +344,36 @@ end = struct
   module Ls = LabeledStatementExt
   
   type proc_ctx = Attribute.t list * Identifier.t * Procedure.t  
-  			
-	let find p n = List.filter ((=) n << Declaration.name) p  
-	let find_proc p n = 
-    Option.cat
-    << List.map (function D.Proc (_,_,p) -> Some p | _ -> None)
-    <| find p n
+
+  let filter = List.filter
+  let find = List.find
+  let find_all = filter
+  let find_decl n = find ((=) n << Declaration.name)
+	let find_proc n = 
+    try 
+      Option.first
+      << List.map (function D.Proc (_,_,p) -> Some p | _ -> None)
+      << filter ((=) n << Declaration.name)
+    with _ -> raise Not_found
   
   let rec fold_over_calls pgm fn a ss =
     let rec foc st a ss =
       List.fold_left (fun a (n,p) -> 
         fn (foc (n::st) a (Procedure.stmts p)) p) a
       << List.filter (fun (n,_) -> not (List.mem n st))
-      << List.flatten
-      << List.map ( fun n -> List.map (Tup2.make n) <| find_proc pgm n )
+      << Option.cat
+      << List.map (fun n -> try Some (n, find_proc n pgm) with _ -> None)
       <| LabeledStatementExt.called ss
     in foc [] a ss
     
-  let is_declared pgm = ((!=) []) << find pgm
-  let is_defined pgm = 
-    List.exists (function 
+  let exists = List.exists
+  let is_declared n = exists ((=) n << Declaration.name)
+  let is_defined n = 
+    exists (function 
     | D.Func (_,_,_,_,_,Some _)
     | D.Proc (_,_,(_,_,_,_,Some _))
     | D.Impl _ -> true
-    | _ -> false
-    ) << find pgm
+    | _ -> false)
 
 	let translate
     ?ignore_attrs
@@ -483,9 +495,8 @@ end
 module Operators = struct
   open Abbreviations
 	
-	let (|:=|) x e = [ Ls.assign [Lv.from_expr x] [e] ]
-	let (|::=|) xs = 
-		List.flatten << List.map (uncurry (|:=|)) << List.combine xs
+	let (|:=|) x e = Ls.assign [Lv.from_expr x] [e]
+	let (|::=|) xs = List.map (uncurry (|:=|)) << List.combine xs
 	
 	let ($:=$) x y = E.ident x |:=| E.ident y
 	let ($::=$) xs ys = List.map E.ident xs |::=| List.map E.ident ys

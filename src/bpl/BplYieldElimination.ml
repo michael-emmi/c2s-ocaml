@@ -13,16 +13,19 @@ let delay_bounding rounds delays pgm =
   let add_debug_info = true in
   
   let print_val var =
-    if add_debug_info then [
+    if add_debug_info then 
       Ls.call "boogie_si_record_int" ~attrs:[A.unit M.leavealone] ~params:[E.ident var]
-    ] else []
+    else Ls.skip ()
   in
 
   let is_boogie_ident s = Str.string_match (Str.regexp "boogie_si_record_.*") s 0 in
 
   let ignore_procs = 
     List.map D.name
-    << List.filter (fun p -> not (Program.is_defined pgm (D.name p)) || D.has M.leavealone p || D.has M.noyields p)
+    << Program.filter (fun p ->
+      not (Program.is_defined (D.name p) pgm) 
+      || D.has M.leavealone p 
+      || D.has M.noyields p)
     <| Program.procs pgm
   in
   
@@ -57,17 +60,16 @@ let delay_bounding rounds delays pgm =
 	| e -> e
   
   and jump_fixed e i = 
-    Ls.ifthenelse ([
+    Ls.ifthenelse [
       Ls.assume ~labels:[delay_label ()] (Option.reduce id (E.bool true) e);
 			Ls.assume (E.ident round_idx |+| E.num i |<| E.ident rounds_const);
 			Ls.assume (E.ident delays_var |+| E.num i |<=| E.ident delays_const);
 			Ls.incr (E.ident round_idx) i;
-			Ls.incr (E.ident delays_var) i]
-      @ print_val round_idx
-    )
+			Ls.incr (E.ident delays_var) i;
+      print_val round_idx ]
 
   and jump_range e i k = 
-    Ls.ifthenelse ([
+    Ls.ifthenelse [
       Ls.assume ~labels:[delay_label ()] (Option.reduce id (E.bool true) e);
       Ls.havoc [jump_var];
       Ls.assume (E.ident jump_var |>=| E.num (Option.reduce id 1 i));
@@ -77,16 +79,15 @@ let delay_bounding rounds delays pgm =
       Ls.assume (E.ident delays_var |+| E.ident jump_var |<=| E.ident delays_const);
 
       Ls.assign [Lv.from_expr <| E.ident round_idx] [E.ident round_idx |+| E.ident jump_var];
-      Ls.assign [Lv.from_expr <| E.ident delays_var] [E.ident delays_var |+| E.ident jump_var]]
-      @ print_val round_idx
-    )
+      Ls.assign [Lv.from_expr <| E.ident delays_var] [E.ident delays_var |+| E.ident jump_var];
+      print_val round_idx ]
   
   and begin_seq_code = 
     (E.ident delays_var |:=| E.num 0)
-    @ (E.ident round_idx |:=| E.num 0)
-    @ print_val (rounds_const)
-    @ print_val (delays_const)
-    @ (gs $::=$ List.map init gs)
+    :: (E.ident round_idx |:=| E.num 0)
+    :: print_val (rounds_const)
+    :: print_val (delays_const)
+    :: (gs $::=$ List.map init gs)
     
   and end_seq_code = 
     List.flatten << List.map 
@@ -187,7 +188,8 @@ let delay_bounding rounds delays pgm =
           if A.has M.noyields ax || A.has M.entrypoint ax then [] 
           else begin
             (round_idx $:=$ init_round_idx)
-            @ print_val init_round_idx
+            :: print_val init_round_idx
+            :: []
           end)
           
       ~per_stmt_map: (const <| function

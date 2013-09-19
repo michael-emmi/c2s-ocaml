@@ -167,6 +167,8 @@ module Option = struct
 	  | [] -> []
 	  | None::xs -> cat xs
 	  | (Some x)::xs -> x :: cat xs
+    
+  let first xs = try List.hd (cat xs) with Failure _ -> raise Not_found
 
   let of_string s =
 	  if s = "" then None

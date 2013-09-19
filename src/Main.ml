@@ -97,34 +97,39 @@ let _ =
   
   while not (Queue.is_empty cmdline) do
     let cmd = Queue.pop cmdline in
+    let _, types, fn = 
+      try List.assoc cmd commands
+      with Not_found ->
+        error "Invalid command: %s." cmd;
+        exit (-1)      
+    in
+
+    let args = 
+      List.map (fun t -> 
+        try 
+          let a = Queue.pop cmdline in
+          match t with
+          | B _ -> (try B (bool_of_string a) with _ -> failwith "expected Boolean")
+          | I _ -> (try I (int_of_string a) with _ -> failwith "expected integer")
+          | S _ -> S a
+          | F _ -> F a
+
+        with Queue.Empty ->
+          error "Not enough arguments to '%s' command; requires %n." cmd (List.length types);
+          exit (-1)
+
+        | Invalid_argument e
+        | Failure e ->
+          error "Invalid arguments to '%s' command: %s" cmd e;
+          exit (-1)
+
+        ) types
+    in
     try 
-      let _, types, fn = List.assoc cmd commands in
-      let args = 
-        List.map (fun t -> 
-          try 
-            let a = Queue.pop cmdline in
-            match t with
-            | B _ -> (try B (bool_of_string a) with _ -> failwith "expected Boolean")
-            | I _ -> (try I (int_of_string a) with _ -> failwith "expected integer")
-            | S _ -> S a
-            | F _ -> F a
-
-          with Queue.Empty ->
-            error "Not enough arguments to '%s' command; requires %n." cmd (List.length types);
-            exit (-1)
-
-          | Invalid_argument e
-          | Failure e ->
-            error "Invalid arguments to '%s' command: %s" cmd e;
-            exit (-1)
-
-          ) types
-      in
       ast := fn args !ast
+    with e ->
+      error "Command `%s` failed: %s" (cmd_to_string cmd args) (Printexc.to_string e);
+      exit (-1)
 
-    with Not_found ->
-      error "Invalid command: %s." cmd;
-      exit (-1)      
-      
   done
   
