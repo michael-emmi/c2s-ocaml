@@ -7,7 +7,22 @@ open BplUtils.Operators
 open BplUtils.Extensions
 open BplUtils.Abbreviations
 
-let instrument k p =
+
+(* HACK : inject the {:method} attribute for certain procedure names. *)
+let inject_method_attribute =
+  Program.translate
+    ~replace_global_decls:( 
+      let method_names = [
+        "push"; "pop";
+        "enqueue"; "dequeue";
+      ] in
+      function
+      | D.Proc (ax,name,p) when List.mem name method_names ->
+        D.Proc (A.unit "method" :: ax, name, p) :: []
+      | d -> d :: []
+    )
+    
+let instrument_with_method_attributes k p =
   let prefix = "Violin" in
   
   let clock_var = sprintf "%s.time" prefix
@@ -15,7 +30,7 @@ let instrument k p =
   and barrier_var = sprintf "%s.ret" prefix
   and open_var = sprintf "%s.%s.open" prefix
   and done_var = sprintf "%s.%s.done" prefix
-  and jump_label = sprintf "%s.%s.End" prefix
+  (* and jump_label = sprintf "%s.%s.End" prefix *)
   and check_proc = sprintf "%s.CheckInvariant" prefix
   in
 	
@@ -38,6 +53,15 @@ let instrument k p =
     <| Program.decls p
   in
   
+  let check_invariant_proc =
+    D.proc check_proc
+      ~attrs:[]
+      ~params:[]
+      ~returns:[]
+      ~decls:[]
+      ~body:[]    
+  in
+  
   let type_checks =
     List.for_all2 (fun (_,t) v -> 
       try List.assoc v vals = t
@@ -49,6 +73,13 @@ let instrument k p =
 			Annotate some procedures with {:method}.";
 	
 	Program.translate
+    
+    ~append_global_decls: 
+      ([ D.var clock_var T.Int ;
+        D.var barrier_var T.Bool ;
+        check_invariant_proc ]
+      @ List.map (fun (m,_,_) -> D.var (open_var m) (T.map [T.Int] T.Int)) methods
+      @ List.map (fun (m,_,_) -> D.var (done_var m) (T.map [T.Int] (T.map [T.Int] (T.map [T.Int] T.Int)))) methods )
 
     (* Add [local_time] parameter to each procedure. *)
 		~new_proc_params: 
@@ -58,10 +89,16 @@ let instrument k p =
       )
     
     (* Make all returns jump to a unified exit point. *)
-		~per_stmt_map: 
+    (* ~per_stmt_map:
       ( fun (ax,n,p) (ls,s) -> match s with
         | S.Return when A.has "method" ax -> [Ls.goto ~labels:ls [jump_label n]]
         | _ -> [ls,s]
+      ) *)
+      
+    ~per_stmt_map: ( fun (ax,n,p) -> function
+      | ls, S.Call (ax,n,ps,rs) when List.mem n (List.map fst3 methods) ->   
+  			[ ls, S.Call (ax, n, ps@[E.ident clock_var], rs) ]
+      | s -> s :: []
       )
 		
     (* Begin each method with [ yield; time >= local_time ] *)
@@ -80,7 +117,7 @@ let instrument k p =
           let args = List.map fst ps
           and rets = List.map fst rs
           in
-          [ Ls.assign ~labels:[jump_label n]
+          [ Ls.assign (* ~labels:[jump_label n] *)
               [Lv.ident barrier_var]
               [E.bool true];
             
@@ -115,9 +152,12 @@ let instrument k p =
                   <| List.map fst vals)
               ) <| methods
             );
-            Ls.return ()
           ]
         
-        | _ -> [] )        
-    
+        | _ -> [] )    
+
 	<| p
+  
+let instrument k =
+  instrument_with_method_attributes k
+  << inject_method_attribute

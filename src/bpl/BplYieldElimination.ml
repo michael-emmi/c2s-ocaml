@@ -195,21 +195,22 @@ let delay_bounding rounds delays pgm =
       ~per_stmt_map: (const <| function
         | s when Ls.has_attr M.begin_seq s -> begin_seq_code @ [s]    
         | s when Ls.has_attr M.end_seq s -> s :: end_seq_code
-        | s when Ls.is_yield s -> begin
+        | (ls,_) as s when Ls.is_yield s -> begin
 
           (* Conditionless yield *)
           match A.get "yield" (Ls.attrs s) with
           | Left (E.Lit (Literal.Num i)) :: [] -> jump_fixed None i :: []
           | Left (E.Lit (Literal.Num i)) :: Left (E.Lit (Literal.Num k)) :: [] -> 
-            jump_range None (Some i) (Some k) :: []
+            Ls.add_labels ls <| jump_range None (Some i) (Some k) :: []
 
           (* Conditional yield *)
           | Left e :: [] -> jump_range (Some e) None None :: []          
           | Left e :: Left (E.Lit (Literal.Num i)) :: [] -> jump_fixed (Some e) i :: []
           | Left e :: Left (E.Lit (Literal.Num i)) :: Left (E.Lit (Literal.Num k)) :: [] ->
-            jump_range (Some e) (Some i) (Some k) :: []
+            Ls.add_labels ls <| jump_range (Some e) (Some i) (Some k) :: []
         
-          | _ -> jump_range None None None :: []
+          | _ -> 
+            Ls.add_labels ls <| jump_range None None None :: []
         end
 
     		| ls, S.Call (ax,n,ps,rs) when not (A.has M.leavealone ax) -> begin

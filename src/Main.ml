@@ -87,6 +87,12 @@ let rec commands : command list = [
     p
     | _ -> assert false
   );
+  
+  "violin-instrument", ("linearizability-to-reachability translation", [I 0],
+  function [I barriers] ->
+    BplViolin.instrument barriers
+    | _ -> assert false
+  );
 ]
 
 let _ =

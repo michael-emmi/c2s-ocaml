@@ -46,13 +46,14 @@ CAML_LIB_OBJ = \
 	BplAst BplParser BplLexer BplUtils BplMarkers \
   BplInitAxioms \
   BplWrapEntrypoints BplYieldElimination BplAsyncToSeq BplAsyncWithWait \
-	BplAsserts BplBackend 
+	BplAsserts BplBackend \
+	BplViolin
     
 DEPRICATED_LIB_OBJ = \
 	Cfg CfgParser CfgLexer Parikh \
 	PnAst PnParser PnLexer PnToBpl \
 	BpAst BpParser BpLexer BpUtils \
-	BplEscAsync BplFifoSeq BplMultiToSingle BplViolin
+	BplEscAsync BplFifoSeq BplMultiToSingle
 
 SOURCES = $(shell find $(SRC) $(OBJDIR) -name "*.ml" -or -name "*.mli")
 CMOFILES = $(addprefix $(OBJDIR)/, $(addsuffix .cmo, $(CAML_LIB_OBJ)))
