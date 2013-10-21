@@ -45,7 +45,9 @@ CAML_LIB_OBJ = \
 	Prelude PrettyPrinting ParsingUtils \
 	BplAst BplParser BplLexer BplUtils BplMarkers \
   BplInitAxioms \
+	BplIdentifyEntryPoints \
   BplWrapEntrypoints BplYieldElimination BplAsyncToSeq BplAsyncWithWait \
+	BplCompleteReturnAssignments \
 	BplAsserts BplBackend \
 	BplViolin
     

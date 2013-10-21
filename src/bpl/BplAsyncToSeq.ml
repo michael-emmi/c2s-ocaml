@@ -136,7 +136,7 @@ let async_to_seq pgm =
     		| ls, S.Call (ax,n,ps,rs) when A.has M.async ax ->
     			if rs <> [] then
     				warn "Found async call (to procedure `%s') with assignments." n;
-			
+
     			Ls.add_labels ls (
             (* Map global variables in argument expressions 
             * to their "saved" values *)

@@ -9,7 +9,6 @@ require_relative 'dbseq'
 require_relative 'verify'
 
 $MYVERSION = "0.1"
-options = {}
 
 def violin_options(opts, options)
   
@@ -27,22 +26,8 @@ def violin_options(opts, options)
   
   opts.on("-g", "--graph-of-trace", "generate a trace graph") do |g|
     options.graph = g
-  end   
-  
+  end  
 end
-
-OptionParser.new do |opts|  
-  options = OpenStruct.new  
-  opts.banner = "usage: #{File.basename $0} SOURCE [options]"
-
-  standard_options(opts, options)
-  clang2bpl_options(opts, options)
-  dbseq_options(opts, options)
-  verify_options(opts, options)
-  violin_options(opts, options)
-
-  options.clang << "-g"
-end.parse!
 
 def violin_instrumentation( src, options )
   seq = "#{File.basename(src,'.bpl')}.VIOLIN.#{options.barriers}.bpl"
@@ -55,22 +40,48 @@ def violin_instrumentation( src, options )
   return seq
 end  
 
-t0 = Time.now()
+def cmdline
+  options = {}
+  
+  OptionParser.new do |opts|  
+    options = OpenStruct.new  
+    opts.banner = "usage: #{File.basename $0} SOURCE [options]"
 
-# 1. translate Clang to Boogie
-src = translate_clang_to_bpl( ARGV, options )
+    standard_options(opts, options)
+    clang2bpl_options(opts, options)
+    dbseq_options(opts, options)
+    verify_options(opts, options)
+    violin_options(opts, options)
 
-# 2. perform the linearizability-to-reachability instrumentation
-src = violin_instrumentation( src, options )
+    options.clang << "-g"
+  end.parse!
+  
+  err "Must specify a source file." unless ARGV.size > 0
+  ARGV.each do |src|
+    err "Source file '#{src}' does not exist." unless File.exists?(src)
+  end
+  
+  t0 = Time.now()
 
-# 3. concurrent to sequential translation
-seq = delay_bounding_seqentialization(src, options)
+  # 1. translate Clang to Boogie
+  src = translate_clang_to_bpl( ARGV, options )
 
-# 4. verify the sequential code with Boogie
-verify(seq, options)
+  # 2. perform the linearizability-to-reachability instrumentation
+  src = violin_instrumentation( src, options )
 
-# 5. remove temporary files
-File.delete( seq ) unless options.keep
+  # 3. concurrent to sequential translation
+  seq = delay_bounding_seqentialization(src, options)
 
-puts "#{File.basename $0} finished in #{(Time.now() - t0).round(2)}s." unless options.quiet
+  # 4. verify the sequential code with Boogie
+  verify(seq, options)
 
+  # 5. remove temporary files
+  File.delete( seq ) unless options.keep
+
+  puts "#{File.basename $0} finished in #{(Time.now() - t0).round(2)}s." unless options.quiet
+end
+
+# if this script is executing...
+if __FILE__ == $0 then
+  cmdline
+end

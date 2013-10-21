@@ -231,14 +231,7 @@ end = struct
 			  Attribute.print_seq ax
 			  <+> Trigger.print_seq ts
       in
-      parens (
-        (* ToDo: should better be a function of the *printed* size. *)
-        if size e + List.length ax + List.length ts < 8
-          then head <+> meta <+> print e
-          else if List.length ax + List.length ts = 0 
-          then indent indent_size (head $+$ meta $+$ print e)
-          else head $+$ indent indent_size (meta $+$ print e)
-      )
+      parens ( head <+> meta <+> print e )
 
 	and print_auto_parens e = if is_term e then print e else parens (print e)
 	and print_seq es = sep << punctuate comma << List.map print <| es

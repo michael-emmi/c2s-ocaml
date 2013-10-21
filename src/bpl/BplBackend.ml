@@ -31,8 +31,7 @@ let for_boogie_si =
   check_for_assertions
   << (fun p -> Program.map_procs (ProcedureExt.fix_modifies p) p)
   << BplAsserts.asserts_to_error_flag ~no_asserts:true
-  << (fun p -> Program.map_procs (ProcedureExt.add_return_assign_decls p) p)
-  << (fun p -> Program.map_stmts_ctx (const <| LabeledStatementExt.complete_returns p) p)
+  << BplCompleteReturnAssignments.complete_returns
   << ensure_si_procedures
   
 let for_boogie_fi =

@@ -190,7 +190,7 @@ end = struct
   (* Complete the return assignments of a call p(e1,..,ek) into
      call x1,..,xn := p(e1,..,ek) . *)
   let complete_returns pgm s =
-    let ignore_var_name i =	sprintf "__ignore_%n_%s" i << Type.stringify in  
+    let ignore_var_name i =	sprintf "#ret_%n_%s" i << Type.stringify in  
   	match s with
     | ls, Statement.Call (ax,n,es,xs) -> begin
       try 
@@ -198,8 +198,8 @@ end = struct
         let _, ts = Procedure.signature p in
         if List.length xs = List.length ts 
           then [s]
-        else if List.length xs > 0 
-          then failwith (sprintf "Unmatched return assignment for `%s'." n)
+        else if List.length xs > 0 then
+          failwith (sprintf "Unmatched return assignment for `%s'." n)
         else begin
           warn "Missing return assignments for `%s'; attempting to add them." n;
           [ ls, Statement.Call (ax,n,es,List.mapi ignore_var_name ts) ]
@@ -243,7 +243,6 @@ and ProcedureExt : sig
   include module type of Procedure with type t = Procedure.t
   val mods : t -> Identifier.t list
   val fix_modifies : Program.t -> t -> t
-  val add_return_assign_decls : Program.t -> t -> t
   
 end = struct
   include Procedure
@@ -280,27 +279,6 @@ end = struct
        ]) [] ms), 
        bd
 
-  (* Declarations for variables introduced because of 
-     return-assignment completion. *)
-  let add_return_assign_decls pgm (tx,ps,rs,sx,bd) =
-    tx, ps, rs, sx, Option.map (fun (ds,ss) ->
-      let ignore_var_name i =	sprintf "__ignore_%n_%s" i << Type.stringify
-      and max_rets = ProgramExt.fold_procs (flip <| fun (_,_,rs,_,_) -> max (List.length rs)) 0
-      and incomplete = LabeledStatementExt.incomplete_calls pgm ss in
-    	ds @ begin
-        Option.cat
-      	<< List.map
-      		(fun (i,t) ->
-      			 if List.exists
-      				 (fun ts -> i < List.length ts && List.nth ts i = t)
-      				 incomplete
-      			 then Some (Declaration.var (ignore_var_name i t) t)
-      			 else None)		
-      	<| List.product 
-          (List.range 0 (max_rets pgm))
-          [ Type.Bool; Type.Int; Type.Map ([],[Type.Int],Type.Int) ]
-      end, ss
-    ) bd
 end
 
 and ProgramExt : sig

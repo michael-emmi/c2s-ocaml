@@ -22,13 +22,8 @@ module M = BplMarkers
 
 let wrap_entrypoint_procedures pgm = 
   
-  let entrypoints = 
-    List.filter (D.has M.entrypoint) <| Program.procs pgm
-  in
-  
-  if entrypoints = [] then
-    warn "No {:%s} procedures found." M.entrypoint;
-      
+  let entrypoints = List.filter (D.has M.entrypoint) (Program.procs pgm) in
+
   Program.translate
     ~append_global_decls:(List.map ( 
       function D.Proc (ax,n,(_,ps,rs,_,_)) ->

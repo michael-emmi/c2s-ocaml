@@ -46,6 +46,8 @@ let rec commands : command list = [
   function [] ->
     BplInitAxioms.init_axioms_at_entry_points 
     << BplWrapEntrypoints.wrap_entrypoint_procedures
+    << BplIdentifyEntryPoints.identify_entry_points
+    << BplCompleteReturnAssignments.complete_returns
     | _ -> assert false
   );
 
@@ -91,6 +93,8 @@ let rec commands : command list = [
   "violin-instrument", ("linearizability-to-reachability translation", [I 0],
   function [I barriers] ->
     BplViolin.instrument barriers
+    << BplIdentifyEntryPoints.identify_entry_points
+    << BplCompleteReturnAssignments.complete_returns
     | _ -> assert false
   );
 ]

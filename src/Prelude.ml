@@ -330,6 +330,7 @@ module List = struct
   let unions xxs = List.fold_left union [] xxs
 
   let minus xs ys = List.filter (not << (flip List.mem) ys) xs
+  let diff xs ys = minus xs ys
 
   let intersects xs =
 	  List.exists (flip List.mem <| xs)
