@@ -388,7 +388,8 @@ end = struct
           << snd << LabeledStatement.map_fold_stmts
             ( fun () s -> 
               match s with
-              | ls, Statement.Return -> (), proc_before_return (ax,n,p) @ [s]
+              | ls, Statement.Return -> 
+                (), Ls.add_labels ls ((proc_before_return (ax,n,p)) @ [Ls.return ()])
               | _ -> (), [s] )
             () <| ss 
         ) bd
