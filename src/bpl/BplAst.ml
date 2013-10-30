@@ -149,7 +149,7 @@ end = struct
 
  	let ident s = Id s
 	let bool b = Lit (if b then Literal.True else Literal.False)
-	let num n = Lit (Literal.Num (Big_int.big_int_of_int n))
+	let num n = Lit (Literal.Num (big_int_of_int n))
   
 	let is_term = function
 		| Lit _ | Id _ | Old _ | FnApp _ 

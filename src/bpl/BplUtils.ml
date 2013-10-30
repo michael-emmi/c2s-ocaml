@@ -163,7 +163,7 @@ end = struct
       (fun ps s ->
          match s with
          | (_, Statement.Call (_,pn,xs,ys)) ->
-             List.union [pn,xs,ys] ps
+             List.append [pn,xs,ys] ps
          | _ -> ps)
       []
 

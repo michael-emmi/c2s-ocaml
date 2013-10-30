@@ -135,11 +135,11 @@ let _ =
 
         ) types
     in
-    try 
+    (* try  *)
       ast := fn args !ast
-    with e ->
-      error "Command `%s` failed: %s" (cmd_to_string cmd args) (Printexc.to_string e);
-      exit (-1)
+    (* with e -> *)
+      (* error "Command `%s` failed: %s" (cmd_to_string cmd args) (Printexc.to_string e); *)
+      (* exit (-1) *)
 
   done
   
