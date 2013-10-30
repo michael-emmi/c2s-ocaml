@@ -60,6 +60,7 @@ let delay_bounding rounds delays pgm =
 	| e -> e
   
   and jump_fixed e i = 
+    let i = Big_int.int_of_big_int i in
     Ls.ifthenelse [
       Ls.assume ~labels:[delay_label ()] (Option.reduce id (E.bool true) e);
 			Ls.assume (E.ident round_idx |+| E.num i |<| E.ident rounds_const);
@@ -69,6 +70,8 @@ let delay_bounding rounds delays pgm =
       print_val round_idx ]
 
   and jump_range e i k = 
+    let i = Option.map Big_int.int_of_big_int i in
+    let k = Option.map Big_int.int_of_big_int k in
     Ls.ifthenelse [
       Ls.assume ~labels:[delay_label ()] (Option.reduce id (E.bool true) e);
       Ls.havoc [jump_var];

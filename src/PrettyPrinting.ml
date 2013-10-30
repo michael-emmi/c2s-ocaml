@@ -11,6 +11,7 @@ let _max_indent_ = max_int
 let char = flip pp_print_char
 let text = flip pp_print_string
 let int = flip pp_print_int
+let big_int = text << Big_int.string_of_big_int
 let float = flip pp_print_float
 let bool = flip pp_print_bool
 

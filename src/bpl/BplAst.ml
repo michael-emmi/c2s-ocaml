@@ -2,6 +2,7 @@
 
 open Prelude
 open Printf
+open Big_int
 
 let indent_size = 3
 
@@ -49,14 +50,14 @@ end
 module Literal = struct
 	type t = True
 			 | False
-			 | Num of int
-			 | Bv of int
+			 | Num of big_int
+			 | Bv of big_int
 
 	open PrettyPrinting
 	let print = function
 		| True -> keyword "true"
 		| False -> keyword "false"
-		| Num n -> int n
+		| Num n -> big_int n
 		| Bv n -> failwith "Literal.print: Bv"
 	let to_string = render << print
 end
@@ -148,7 +149,7 @@ end = struct
 
  	let ident s = Id s
 	let bool b = Lit (if b then Literal.True else Literal.False)
-	let num n = Lit (Literal.Num n)
+	let num n = Lit (Literal.Num (Big_int.big_int_of_int n))
   
 	let is_term = function
 		| Lit _ | Id _ | Old _ | FnApp _ 

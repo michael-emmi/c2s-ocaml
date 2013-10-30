@@ -135,7 +135,7 @@ rule token = parse
 	  lexbuf.Lexing.lex_curr_p }
 
   | string_lit as lxm { STRING_LIT (unescape_quotes (String.sub lxm 1 (String.length lxm - 2))) }
-  | decimal_integer_lit as lxm { NUMBER (int_of_string lxm) }
+  | decimal_integer_lit as lxm { NUMBER (Big_int.big_int_of_string lxm) }
   | bv_type as lxm { BV (int_of_string <| String.drop 2 lxm) }
 
   | "==>"          { IMPLIES }

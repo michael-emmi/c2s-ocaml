@@ -3,6 +3,7 @@ type doc
 val char : char -> doc
 val text : string -> doc
 val int : int -> doc
+val big_int : Big_int.big_int -> doc
 val float : float -> doc
 val bool : bool -> doc
 

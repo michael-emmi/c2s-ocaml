@@ -30,8 +30,8 @@
 %token <Lexing.position> LANGLE RANGLE
 %token <Lexing.position> DOT COMMA SEMI COLON ASSIGN
 
-%token <int> NUMBER
-%token <int> BVLIT
+%token <Big_int.big_int > NUMBER
+%token <Big_int.big_int > BVLIT
 %token <string> STRING_LIT
 
 %token IMPLIES IFF OR AND
