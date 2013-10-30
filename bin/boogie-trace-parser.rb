@@ -155,16 +155,16 @@ end
 
 input_file = ARGV[0]
 dot_file = File.basename(input_file) + ".dot"
-pdf_file = File.basename(input_file) + ".pdf"
+svg_file = File.basename(input_file) + ".svg"
 g = top( IO.readlines(input_file) )
 File.open(dot_file,'w') {|f| f.write(g)}
-if system("dot -Tpdf #{dot_file} -o#{pdf_file}") then
-  system("open #{pdf_file}")
+if system("dot -Tsvg #{dot_file} -o#{svg_file}") then
+  system("open #{svg_file}")
   begin
-    File.delete(*[dot_file, pdf_file]) if $cleanup
+    File.delete(*[dot_file, svg_file]) if $cleanup
   rescue
     # ignore cleanup problems.
   end
 else
-  puts "Failed to generate #{pdf_file} with Dot."
+  puts "Failed to generate #{svg_file} with Dot."
 end
