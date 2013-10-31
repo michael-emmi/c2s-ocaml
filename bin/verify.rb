@@ -89,7 +89,7 @@ def verify_options(opts, options)
     options.verifier = v
   end
   
-  opts.on("--timeout TIME", Integer, "The prover timeout (default ∞)") do |t|
+  opts.on("--timeout TIME", Integer, "The prover timeout (default -)") do |t|
     options.boogie << "/timeLimit:#{t}"
   end
 
