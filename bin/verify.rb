@@ -79,6 +79,7 @@ end
 
 def verify_options(opts, options)
   options.verifier = "Boogie-SI"
+  options.timeout = nil
   options.boogie = []
 
   opts.separator ""
@@ -86,6 +87,10 @@ def verify_options(opts, options)
   
   opts.on("--verifier NAME", String, ["Boogie-SI", "Boogie-FI"], "The verification engine") do |v|
     options.verifier = v
+  end
+  
+  opts.on("--timeout TIME", Integer, "The prover timeout (default ∞)") do |t|
+    options.boogie << "/timeLimit:#{t}"
   end
 
   opts.on("-b", "--recursion-bound MAX", Integer, "The recursion bound (default ??)") do |r|
