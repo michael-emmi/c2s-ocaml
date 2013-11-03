@@ -85,10 +85,10 @@ def abortOp( cycle )
   xxx
 end
 
-def harnessXXX( options )
-  cycle = options.cycle
-  recbound = options.recursion
-  deferred = options.update == :deferred
+def harnessXXX(  )
+  cycle = @cycle
+  recbound = @recursion
+  deferred = @update == :deferred
   printing = false
 
   size = 2*cycle
@@ -104,10 +104,10 @@ def harnessXXX( options )
   $deferred = deferred  
   $shortcut_inlining = false
   
-  puts "Generating #{cycle}-cycle detection harness with:".underline if options.verbose
-  puts "* #{if more_thds then "from #{cycle} to #{cycle+recbound}" else "exactly #{cycle}" end} threads." if options.verbose
-  puts "* #{if more_txs then "from 1 to #{1+recbound}" else "exactly 1" end} transaction(s) per thread." if options.verbose
-  puts "* #{if more_ops then "any R-(R+W)^i-W-C (for i=0..#{recbound})" else "only R-W-C" end} transactions." if options.verbose
+  puts "Generating #{cycle}-cycle detection harness with:".underline if @verbose
+  puts "* #{if more_thds then "from #{cycle} to #{cycle+recbound}" else "exactly #{cycle}" end} threads." if @verbose
+  puts "* #{if more_txs then "from 1 to #{1+recbound}" else "exactly 1" end} transaction(s) per thread." if @verbose
+  puts "* #{if more_ops then "any R-(R+W)^i-W-C (for i=0..#{recbound})" else "only R-W-C" end} transactions." if @verbose
     
   def pred( i, n )
     return (if i == 0 then n-1 else i-1 end);

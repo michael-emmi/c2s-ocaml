@@ -1,87 +1,58 @@
 #!/usr/bin/env ruby
 
-require 'colorize'
-require 'optparse'
-require 'ostruct'
 require_relative 'prelude'
 require_relative 'clang2bpl'
 require_relative 'dbseq'
 require_relative 'verify'
 
-$MYVERSION = "0.1"
-
-def violin_options(opts, options)
+module Violin  
   
-  options.barriers = 0
+  attr_accessor :barriers
 
-  opts.separator ""
-  opts.separator "Encoding options:"
+  def options(opts)
   
-  opts.on("-b", "--barriers NUM", Integer, "The barrier bound (default 0)") do |k|
-    options.barriers = k
+    @barriers = 0
+
+    opts.separator ""
+    opts.separator "Encoding options:"
+  
+    opts.on("-b", "--barriers NUM", Integer, "The barrier bound (default 0)") do |k|
+      @barriers = k
+    end
   end
-  
-  opts.separator ""
-  opts.separator "Other options:"
-  
-  opts.on("-g", "--graph-of-trace", "generate a trace graph") do |g|
-    options.graph = g
-  end  
+
+  def instrumentation(src)
+    seq = "#{File.basename(src,'.bpl')}.VIOLIN.#{@barriers}.bpl"
+    puts "* c2s/LIN: #{src} => #{seq.blue}" unless @quiet
+    cmd = "#{c2s()} load #{src} " \
+      "violin-instrument #{@barriers} " \
+      "print #{seq}"
+    puts cmd if @verbose
+    err "could not instrument." unless system(cmd)
+    return seq  end  
 end
 
-def violin_instrumentation( src, options )
-  seq = "#{File.basename(src,'.bpl')}.VIOLIN.#{options.barriers}.bpl"
-  puts "* c2s/LIN: #{src} => #{seq.blue}" unless options.quiet
-  cmd = "#{c2s()} load #{src} " \
-    "violin-instrument #{options.barriers} " \
-    "print #{seq}"
-  puts cmd if options.verbose
-  err "could not instrument." unless system(cmd)
-  return seq
-end  
-
-def cmdline
-  options = {}
-  
-  OptionParser.new do |opts|  
-    options = OpenStruct.new  
-    opts.banner = "usage: #{File.basename $0} SOURCE [options]"
-
-    standard_options(opts, options)
-    clang2bpl_options(opts, options)
-    dbseq_options(opts, options)
-    verify_options(opts, options)
-    violin_options(opts, options)
-
-    options.clang << "-g"
-  end.parse!
-  
-  err "Must specify a source file." unless ARGV.size > 0
-  ARGV.each do |src|
-    err "Source file '#{src}' does not exist." unless File.exists?(src)
-  end
-  
-  t0 = Time.now()
-
-  # 1. translate Clang to Boogie
-  src = translate_clang_to_bpl( ARGV, options )
-
-  # 2. perform the linearizability-to-reachability instrumentation
-  src = violin_instrumentation( src, options )
-
-  # 3. concurrent to sequential translation
-  seq = delay_bounding_seqentialization(src, options)
-
-  # 4. verify the sequential code with Boogie
-  verify(seq, options)
-
-  # 5. remove temporary files
-  File.delete( seq ) unless options.keep
-
-  puts "#{File.basename $0} finished in #{(Time.now() - t0).round(2)}s." unless options.quiet
-end
-
-# if this script is executing...
 if __FILE__ == $0 then
-  cmdline
+  include Tool
+  include Clang2Bpl
+  include DelayBounding
+  include Verifier
+  include Violin
+  version 0.9
+  
+  run do
+    err "Must specify a source file." unless ARGV.size > 0
+    ARGV.each do |src|
+      err "Source file '#{src}' does not exist." unless File.exists?(src)
+    end
+  
+    t0 = Time.now()
+    src = translate(ARGV)
+    src = instrumentation(src)
+    seq = sequentialize(src)
+    verify(seq)
+    File.delete( seq ) unless @keep
+
+    puts "#{File.basename $0} finished in #{(Time.now() - t0).round(2)}s." unless @quiet
+  end
 end

@@ -1,38 +1,69 @@
 #!/usr/bin/env ruby
 
+require 'optparse'
 require 'colorize'
 
-def err( msg )
-  puts "Error: #{msg}".red
-  exit -1
-end
+module Tool
+  
+  attr_accessor :quiet, :verbose, :keep
+    
+  def options(opts)
+    
+    @quiet = false
+    @verbose = false
+    @keep = false
 
-def warn( msg )
-  puts "Warning: #{msg}".yellow
-end
+    opts.separator ""
+    opts.separator "Basic options:"
+    
+    opts.on("-h", "--help", "Show this message") do
+      puts opts
+      exit
+    end
+  
+    opts.on("--version", "Show version") do
+      puts "#{File.basename $0} version #{@version || "??"}"
+      exit
+    end
+  
+    opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
+      @verbose = v
+      @quiet = !v
+    end
 
-def standard_options(opts, options)
-  opts.on("-h", "--help", "Show this message") do
-    puts opts
-    exit
+    opts.on("-q", "--[no-]quiet", "Run very quietly") do |q|
+      @quiet = q
+      @verbose = !q
+    end
+
+    opts.on("-k", "--[no-]keep-files", "Don't delete intermediate files") do |v|
+      @keep = v
+    end
   end
   
-  opts.on("--version", "Show version") do
-    puts "#{File.basename $0} version #{$MYVERSION}"
-    exit
+  def run
+    OptionParser.new do |opts|
+      self.class.included_modules.reverse.concat([self.class]).each do |m|
+        if m.instance_methods(false).include?(:options) then
+          m.instance_method(:options).bind(self).call(opts)
+        end
+      end
+    end.parse!
+
+    yield if block_given?
   end
   
-  opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
-    options.verbose = v
-    options.quiet = !v
+  def version(v)
+    @version = v
+  end
+  
+  def err( msg )
+    puts "Error: #{msg}".red
+    exit -1
   end
 
-  opts.on("-q", "--[no-]quiet", "Run very quietly") do |q|
-    options.quiet = q
-    options.verbose = !q
+  def warn( msg )
+    puts "Warning: #{msg}".yellow
   end
-
-  opts.on("-k", "--[no-]keep-files", "Don't delete intermediate files") do |v|
-    options.keep = v
-  end
+  
 end

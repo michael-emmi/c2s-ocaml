@@ -69,10 +69,10 @@ let rec commands : command list = [
     | _ -> assert false
   );
 
-  "prepare", ("prepare code for verifier (Boogie-SI or Boogie-FI)", [S "BACK-END"], 
+  "prepare", ("prepare code for verifier (boogie_si or boogie_fi)", [S "BACK-END"], 
   function 
-    | [S "Boogie-SI"] -> BplBackend.for_boogie_si
-    | [S "Boogie-FI"] -> BplBackend.for_boogie_fi
+    | [S "boogie_si"] -> BplBackend.for_boogie_si
+    | [S "boogie_fi"] -> BplBackend.for_boogie_fi
     | [S s] -> error "Invalid argument to 'prepare' command: %s" s; exit (-1)
     | _ -> assert false
   );
