@@ -46,6 +46,7 @@ module BoogieTraceParser
   end
 
   def following(pattern)
+    puts "FOLLOWING : #{@lines.first}"
     @lines.shift until @lines.empty? || m = @lines.first =~ pattern
     err "expecting #{pattern}" if @lines.empty?
     @lines.shift
@@ -53,6 +54,7 @@ module BoogieTraceParser
   end
 
   def see(pattern)
+    puts "SEE : #{@lines.first}"
     m = @lines.shift.match(pattern)
     err "expecting #{pattern}" unless m
     yield m if block_given?
@@ -71,7 +73,7 @@ module BoogieTraceParser
 
     "digraph G { \
       \n  node [shape = record];
-      \n  #{tree * "\l  "} \
+      \n  #{tree * "\n  "} \
     \n}"
   end
   
@@ -93,25 +95,32 @@ module BoogieTraceParser
       next if line.match /value = T@\$mop!val!(\d+)/ do |m|
 
         # TODO change SMACK
-        # kind = see(/value = (.*)/){|m| m[1] == 0 ? :read : :write}
-        op = m[1].to_i > 0 ? "=&gt;" : ":="
+        kind = see(/value = (.*)/){|m| m[1].to_i == 0 ? :read : :write}
+        addr = see(/value = (.*)/){|m| m[1].gsub(/[() ]/,"").to_i}
+        val  = see(/value = (.*)/){|m| m[1].gsub(/[() ]/,"").to_i}
 
-        addr = see(/value = (.*)/){|m| m[1].to_i}
-        val  = see(/value = (.*)/){|m| m[1].to_i}
-        stmts << "M[#{addr}] #{op} #{val}"
+        if kind == :read
+          stmts << "read M[#{addr}] =&gt; #{val}"
+        else
+          stmts << "M[#{addr}] := #{val}"
+        end
       end
       
       next if line.match /value = (.*)/ do |m|
+        val = m[1].gsub(/[()]/,"")
         if round_known then
-          stmts << "val: #{m[1]}"
+          stmts << "val: #{val}"
         else
-          stmts << " | ROUND #{m[1]} "
+          if stmts.last then stmts.last << " ROUND #{val} "
+          else stmts << " ROUND #{val} "
+          end
           round_known = true
         end
       end
       
       next if line.match /.*\.bpl\(\d+,\d+\): ~yield/ do
         round_known = false
+        stmts.last << "|"
       end
       
       next if line.match /.*\.bpl\(\d+,\d+\): .*/ do
@@ -121,7 +130,8 @@ module BoogieTraceParser
       err "unexpected line: #{line}"
     end
     
-    tree << "#{me} [label=\"{#{name || "top"} #{stmts * '\\l'}\\l }\"];"
+    puts "Creating #{me}"
+    tree << "#{me} [label=\"{#{name || "top"} | #{stmts * '\l'} }\"];"
     return me
   end
   
