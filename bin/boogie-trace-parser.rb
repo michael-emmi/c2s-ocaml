@@ -46,7 +46,6 @@ module BoogieTraceParser
   end
 
   def following(pattern)
-    puts "FOLLOWING : #{@lines.first}"
     @lines.shift until @lines.empty? || m = @lines.first =~ pattern
     err "expecting #{pattern}" if @lines.empty?
     @lines.shift
@@ -54,7 +53,6 @@ module BoogieTraceParser
   end
 
   def see(pattern)
-    puts "SEE : #{@lines.first}"
     m = @lines.shift.match(pattern)
     err "expecting #{pattern}" unless m
     yield m if block_given?
@@ -69,7 +67,6 @@ module BoogieTraceParser
     see(/This assertion might not hold./)
     see(/Execution trace:/)    
     procedure
-    see(/Boogie program verifier finished/)
 
     "digraph G { \
       \n  node [shape = record];
@@ -84,8 +81,9 @@ module BoogieTraceParser
     
     until !(line = @lines.shift.chomp) ||
       (name && line =~ /Inlined call to procedure .* ends/) ||
-      (!name && line.empty?) do
-      
+      (!name && line.empty?) ||
+      (!name && line =~ /Boogie program verifier finished/) do
+        
       next if line.match /Inlined call to procedure (.*) begins/ do |m|
         stmts << "call #{m[1]}"
         child = procedure m[1]
@@ -94,7 +92,6 @@ module BoogieTraceParser
       
       next if line.match /value = T@\$mop!val!(\d+)/ do |m|
 
-        # TODO change SMACK
         kind = see(/value = (.*)/){|m| m[1].to_i == 0 ? :read : :write}
         addr = see(/value = (.*)/){|m| m[1].gsub(/[() ]/,"").to_i}
         val  = see(/value = (.*)/){|m| m[1].gsub(/[() ]/,"").to_i}
@@ -130,7 +127,6 @@ module BoogieTraceParser
       err "unexpected line: #{line}"
     end
     
-    puts "Creating #{me}"
     tree << "#{me} [label=\"{#{name || "top"} | #{stmts * '\l'} }\"];"
     return me
   end
