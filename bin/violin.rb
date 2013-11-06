@@ -35,9 +35,9 @@ end
 if __FILE__ == $0 then
   include Tool
   include Clang2Bpl
+  include Violin
   include DelayBounding
   include Verifier
-  include Violin
   version 0.9
   
   run do
@@ -46,13 +46,9 @@ if __FILE__ == $0 then
       err "Source file '#{src}' does not exist." unless File.exists?(src)
     end
   
-    t0 = Time.now()
-    src = translate(ARGV)
-    src = instrumentation(src)
-    seq = sequentialize(src)
+    tempfile( src = translate(ARGV) )
+    tempfile( src = instrumentation(src) )
+    tempfile( seq = sequentialize(src) )
     verify(seq)
-    File.delete( seq ) unless @keep
-
-    puts "#{File.basename $0} finished in #{(Time.now() - t0).round(2)}s." unless @quiet
   end
 end

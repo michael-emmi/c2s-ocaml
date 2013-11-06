@@ -61,16 +61,13 @@ if __FILE__ == $0 then
     # @clang_opts << "-g"
     # @smack_opts << "-mem-mod-impls"
   
-    t0 = Time.now()
-    src = translate( ARGV )
+    tempfile( src = translate( ARGV ) )
 
     resolve_tm_operations(src)
     inject_tm_harness(src)  
     puts "* TM operations resolved, harness appended to #{src.blue}" unless @quiet
 
-    seq = sequentialize(src)
+    tempfile( seq = sequentialize(src) )
     verify(seq)
-    File.delete( seq ) unless @keep
-    puts "#{File.basename $0} finished in #{(Time.now() - t0).round(2)}s." unless @quiet
   end
 end

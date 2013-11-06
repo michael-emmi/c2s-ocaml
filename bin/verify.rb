@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require_relative 'prelude'
+require_relative 'boogie-trace-parser'
 
 module Verifier
   
@@ -55,30 +56,34 @@ module Verifier
           
       @boogie_opts << "/stratifiedInline:2"
       @boogie_opts << "/extractLoops"
+      @boogie_opts << "/siVerbose:1" if @verbose
 
     when :boogie_fi
       warn "without specifying a /loopUnroll, Boogie might be imprecise." \
         unless @boogie_opts.index{|o| o =~ /\/loopUnroll/}
-          
+
     else
       err "invalid back-end: #{@verifier}"
     end
        
     @boogie_opts << "/errorLimit:1"
     @boogie_opts << "/errorTrace:2"
-        
+
     cmd = "#{boogie()} #{src} #{@boogie_opts * " "}"
     puts cmd if @verbose
     t = Time.now
-    output = `#{cmd}`
+    
+    output = task do
+      `#{cmd}`
+    end
+        
     cleanup = []
     if not $?.success? then
       err "problem with Boogie: #{output}"
     else
       if @graph && output =~ /[1-9][0-9]* errors?/ then
         File.open("#{src}.trace",'w'){|f| f.write(output) }
-        `boogie-trace-parser.rb #{src}.trace`
-        cleanup << "#{src}.trace"
+        showtrace "#{src}.trace"
       else
         if @quiet then
           puts output.lines.select{|l| l =~ /[0-9]* verified/}[0]
@@ -95,16 +100,14 @@ end
 if __FILE__ == $0 then
   include Tool
   include Verifier
+  include BoogieTraceParser
   version 1.0
   
   run do
     err "Must specify a single Boogie source file." unless ARGV.size == 1
     src = ARGV[0]
     err "Source file '#{src}' does not exist." unless File.exists?(src)
-  
-    t0 = Time.now()
     verify(src)
-    puts "#{File.basename $0} finished in #{(Time.now() - t0).round(2)}s." unless @quiet    
   end
 
 end

@@ -1,170 +1,141 @@
 #!/usr/bin/env ruby
 
-MYVERSION = "0.1"
-C2S = "#{File.dirname $0}/c2s"
-BOOGIE = "Boogie"
-$cleanup = false
+require_relative 'prelude'
 
-# puts "Boogie Trace Parser version #{MYVERSION}"
-
-def usage()
-    puts "usage: boogie-trace-parser.rb .."
-end
-
-BOOGIE_SIG = /Boogie program verifier version ([0-9.]+)/
-TRACE_SIG = /\(\d+,\d+\):/
-TRACE_START = /Execution trace:/
-BOOGIE_END = /Boogie program verifier finished/
-
-IDENT = /[A-Za-z0-9$_~][A-Za-z0-9.$_-]*/
-BOOLVAL = /(false|true)/
-NUMVAL = /(\d+|\(- \d+\))/
-SEPVAL = /T@sep!val!\d+/
-TVAL = /T@(#{IDENT})!val!(\d+)/
-VAL = /#{BOOLVAL}|#{NUMVAL}|#{TVAL}/
-
-INTRAPROC_STEP = /(.*)\.bpl\(\d+,\d+\): #{IDENT}/
-VALUE_STEP = /value = (#{VAL})/
-
-CALL_BEGIN = /Inlined call to procedure (#{IDENT}) begins/
-CALL_END = /Inlined call to procedure #{IDENT} ends/
-
-DELAY = /DELAY/
-
-def top(lines)
-  if not (lines.delete_at(0) =~ BOOGIE_SIG) then
-    return nil
-  else
-    while t = trace(lines) do
-      return trace_to_graph(t)
+module BoogieTraceParser
+  attr_accessor :has_rounds
+  
+  def options(opts)
+    opts.on("--[no]concurrency", "Process c2s concurrency, e.g. rounds, delays.") do |b|
+      @has_rounds = b
     end
   end
-end
+  
+  def dot
+    err "cannot find 'dot' in executable path." if `which dot`.empty?
+    return "dot"
+  end
+  
+  def trace2dot(tracefile)
+    tempfile( dotfile = File.basename(tracefile) + ".dot" )
+    File.open(dotfile,'w') do |f|
+      f.write( graph_of(IO.readlines(tracefile)) )
+    end
+    return dotfile
+  end
+  
+  def dot2svg(dotfile)
+    svgfile = File.basename(dotfile) + ".svg"
+    cmd = "#{dot} -Tsvg #{dotfile} -o#{svgfile}"
+    err "could not generate SVG image" unless system(cmd)
+    return svgfile
+  end
+  
+  def opensvg(svgfile)
+    err "could not open graph image" unless system("open #{svgfile}")
+  end
+  
+  def showtrace(tracefile)
+    opensvg( dot2svg( trace2dot(tracefile) ) )
+  end
+  
+  attr_accessor :lines, :tree
 
-$idx = 0
-def new_node()
-  $idx = $idx + 1
-  return "n#{$idx}"
-end
+  def node
+    "n#{@unique += 1}"
+  end
 
-def trace_to_graph(t)
-  n = new_node()
-  g = []
-  step_to_graph(t,nil,[],g)
-  "digraph G { \
-    \n  node [shape = record];
-    \n  #{g*"\n  "} \
-  \n}"
-end
+  def following(pattern)
+    @lines.shift until @lines.empty? || m = @lines.first =~ pattern
+    err "expecting #{pattern}" if @lines.empty?
+    @lines.shift
+    yield m if block_given?
+  end
 
-def step_to_graph(s,m,vals,g)
-  if s.is_a?(Hash) and s[:proc] then
-    n = new_node()
-    vs = []
+  def see(pattern)
+    m = @lines.shift.match(pattern)
+    err "expecting #{pattern}" unless m
+    yield m if block_given?
+  end
+
+  def graph_of(lines)
+    @lines = lines
+    @tree = []
+    @unique = 0
     
-    s[:trace].each do |t|
-      step_to_graph(t,n,vs,g)
+    following(/Boogie program verifier version/)
+    see(/This assertion might not hold./)
+    see(/Execution trace:/)    
+    procedure
+    see(/Boogie program verifier finished/)
+
+    "digraph G { \
+      \n  node [shape = record];
+      \n  #{tree * "\l  "} \
+    \n}"
+  end
+  
+  def procedure(name = nil)
+    me = node
+    stmts = []
+    round_known = !name
+    
+    until !(line = @lines.shift.chomp) ||
+      (name && line =~ /Inlined call to procedure .* ends/) ||
+      (!name && line.empty?) do
+      
+      next if line.match /Inlined call to procedure (.*) begins/ do |m|
+        stmts << "call #{m[1]}"
+        child = procedure m[1]
+        tree << "#{me} -> #{child};"
+      end
+      
+      next if line.match /value = T@\$mop!val!(\d+)/ do |m|
+
+        # TODO change SMACK
+        # kind = see(/value = (.*)/){|m| m[1] == 0 ? :read : :write}
+        op = m[1].to_i > 0 ? "=&gt;" : ":="
+
+        addr = see(/value = (.*)/){|m| m[1].to_i}
+        val  = see(/value = (.*)/){|m| m[1].to_i}
+        stmts << "M[#{addr}] #{op} #{val}"
+      end
+      
+      next if line.match /value = (.*)/ do |m|
+        if round_known then
+          stmts << "val: #{m[1]}"
+        else
+          stmts << " | ROUND #{m[1]} "
+          round_known = true
+        end
+      end
+      
+      next if line.match /.*\.bpl\(\d+,\d+\): ~yield/ do
+        round_known = false
+      end
+      
+      next if line.match /.*\.bpl\(\d+,\d+\): .*/ do
+        true
+      end
+      
+      err "unexpected line: #{line}"
     end
     
-    g << "#{m} -> #{n};" if m
-    g << "#{n} [label=\"{proc #{s[:proc]}|#{vs*'\\n'}}\"];"
-  else
-    vals << clean_val(s)
+    tree << "#{me} [label=\"{#{name || "top"} #{stmts * '\\l'}\\l }\"];"
+    return me
   end
-end
-
-def clean_val(v)
-  if m = v.match(SEPVAL) then
-    "|"
-  elsif m = v.match(TVAL) then
-    "#{m[1]}:#{m[2]}"
-  elsif m = v.match(/\A#{NUMVAL}\z/) then
-    "#{m[1]}"
-  else
-    v
-  end
-end
-
-def trace(lines)
-  if lines.length < 2 ||
-    !(lines[0] =~ TRACE_SIG) ||
-    !(lines[1] =~ TRACE_START) then
-    return nil
-  else
-    lines.delete_at(0)
-    lines.delete_at(0)
-    return procedure("TOP", lines)
-  end
-end
-
-def procedure(p, lines)
-  t = []
-  while step(t, lines) do
-    
-  end
-  return { :proc => p, :trace => t }
-end
-  
-def step(t, lines)
-  if lines.empty? then
-    return nil
-  end
-  
-  line = lines.delete_at(0)
-  
-  if line.strip.empty? then
-    return "skip"
-  
-  elsif m = line.match( INTRAPROC_STEP ) then
-    if line =~ DELAY then
-      t << "*delay*"
-    end
-    return "step"
-    
-  elsif m = line.match( CALL_BEGIN ) then
-    t << procedure( m[1], lines )
-    t << "|call #{m[1]}|"
-    return "call"
-    
-  elsif m = line.match( CALL_END ) then
-    return nil
-    
-  elsif m = line.match( VALUE_STEP ) then
-    if m[1] =~ /\$mop/ then
-      read = clean_val(m[1]) == "$mop:0"
-      loc = lines.delete_at(0).match( VALUE_STEP )[1].gsub(/\(- (\d+)\)/,'-\1')
-      val = lines.delete_at(0).match( VALUE_STEP )[1]
-      t << "#{if read then "R" else "W" end}(#{loc},#{val})"
-    else
-      t << m[1]
-    end
-    return "val"
-    
-  elsif m = line.match( BOOGIE_END ) then
-    return nil
-    
-  else
-    warn "Unexpected line: #{line}"
-    return "skip"
-  end
-end
-
-def print(t)
   
 end
 
-input_file = ARGV[0]
-dot_file = File.basename(input_file) + ".dot"
-svg_file = File.basename(input_file) + ".svg"
-g = top( IO.readlines(input_file) )
-File.open(dot_file,'w') {|f| f.write(g)}
-if system("dot -Tsvg #{dot_file} -o#{svg_file}") then
-  system("open #{svg_file}")
-  begin
-    File.delete(*[dot_file, svg_file]) if $cleanup
-  rescue
-    # ignore cleanup problems.
+if __FILE__ == $0 then
+  include Tool
+  include BoogieTraceParser
+  version 0.3
+  
+  run do 
+    err "Must specify a single Boogie source file." unless ARGV.size == 1
+    tracefile = ARGV[0]
+    err "Source file '#{tracefile}' does not exist." unless File.exists?(tracefile)
+    showtrace(tracefile)
   end
-else
-  puts "Failed to generate #{svg_file} with Dot."
 end

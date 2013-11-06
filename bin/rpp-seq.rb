@@ -52,10 +52,7 @@ if __FILE__ == $0 then
     src = ARGV[0]
     err "Source file '#{src}' does not exist." unless File.exists?(src)
 
-    t0 = Time.now()
-    seq = sequentialize(src)
+    tempfile( seq = sequentialize(src) )
     verify(seq)
-    File.delete(seq) unless @keep
-    puts "#{File.basename $0} finished in #{(Time.now() - t0).round(2)}s." unless @quiet
   end
 end

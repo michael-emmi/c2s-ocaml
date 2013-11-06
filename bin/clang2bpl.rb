@@ -84,7 +84,7 @@ module Clang2Bpl
 
     # 1. compile the sources one by one to LLVM bytecode
     sources.each do |src|
-      llvmbcs << bc = "#{File.basename(src,File.extname(src))}.bc"
+      tempfile( bc = "#{File.basename(src,File.extname(src))}.bc" )
       puts "* Clang: #{src} => #{bc.light_blue}" unless @quiet
       cmd = "#{clang()} #{@clang_opts * " "} -g -c #{src} -emit-llvm -o #{bc}"
       puts cmd if @verbose
@@ -98,7 +98,7 @@ module Clang2Bpl
       cmd = "#{llvmlink()} -o #{bc} #{llvmbcs * " "}"
       puts cmd if @verbose
       err "failed to link #{llvmbcs * ", "}." unless system(cmd)
-      llvmbcs << bc
+      tempfile(bc)
     end
 
     # 3. translate the bytecode to Boogie
@@ -106,9 +106,6 @@ module Clang2Bpl
     cmd = "#{smack()} #{@smack_opts * " "} #{bc} 2> #{bpl}"
     puts cmd if @verbose
     err "failed to translate bytecode to Boogie." unless system(cmd)
-
-    # 4. remove temporary files
-    File.delete( *llvmbcs ) unless @keep
 
     return bpl
   end
@@ -125,8 +122,6 @@ if __FILE__ == $0 then
     ARGV.each do |src|
       err "Source file '#{src}' does not exist." unless File.exists?(src)
     end
-    t0 = Time.now()
     translate(ARGV)
-    puts "#{File.basename $0} finished in #{(Time.now() - t0).round(2)}s." unless @quiet
   end
 end
