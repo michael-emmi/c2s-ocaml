@@ -62,6 +62,7 @@ module BoogieTraceParser
     @lines = lines
     @tree = []
     @unique = 0
+    @addrs = global_addrs
     
     following(/Boogie program verifier version/)
     see(/This assertion might not hold./)
@@ -75,7 +76,7 @@ module BoogieTraceParser
   end
   
   def trace
-    see(/Execution trace:/)    
+    see(/Execution trace:/)
     _ = procedure
   end
   
@@ -100,6 +101,9 @@ module BoogieTraceParser
         kind = see(/value = (.*)/){|m| m[1].to_i == 0 ? :read : :write}
         addr = see(/value = (.*)/){|m| m[1].gsub(/[() ]/,"").to_i}
         val  = see(/value = (.*)/){|m| m[1].gsub(/[() ]/,"").to_i}
+        
+        addr = @addrs[addr] || addr
+        val = "#{val} (#{@addrs[val]})" if @addrs[val]
 
         if kind == :read
           stmts << "read M[#{addr}] = #{val}"
@@ -156,6 +160,24 @@ module BoogieTraceParser
       end
     end
     return exprs
+  end
+  
+  def global_addrs
+    bplfile = nil
+    @lines.each do |line|
+      break if line.match /(\S*.bpl)\(\d+,\d+\):/ do |m|
+        bplfile = m[1]
+      end
+    end
+    err "Cannot determine BPL source file." unless bplfile
+
+    addrs = {}
+    File.new(bplfile).each_line do |line|
+      line.match /axiom (\S+) == (-\d+);/ do |m|
+        addrs[m[2].to_i] = m[1]
+      end
+    end
+    return addrs
   end
 
 end
