@@ -21,6 +21,14 @@ let style = AtCallsite
  * the unordered (i.e., "bag") semantics.*)
 let async_to_seq pgm =
   
+  let add_debug_info = true in
+  
+  let print_val var =
+    if add_debug_info then 
+      Ls.call "boogie_si_record_int" ~attrs:[A.unit M.leavealone] ~params:[E.ident var]
+    else Ls.skip ()
+  in
+  
 	let guess = fun x -> sprintf "%s.guess" x
 	and save = fun x -> sprintf "%s.save" x
 	and next = fun x -> sprintf "%s.next" x 
@@ -111,14 +119,24 @@ let async_to_seq pgm =
 
 	else
 		Program.translate
+      ~ignore_attrs: [M.leavealone]
+      
       ~prepend_global_decls: 
         (D.var seq_idx T.Int :: next_decls)
         
       ~append_global_decls: async_decls
 
+			~proc_body_prefix: 
+        (fun (ax,_,_) -> 
+          if A.has M.entrypoint ax then [] 
+          else [
+            (seq_idx $:=$ seq_idx_local) ;
+            print_val seq_idx_local 
+          ])
+          
 			~new_proc_params: 
         (fun (ax,_,_) -> 
-          if A.has M.leavealone ax then [] 
+          if A.has M.leavealone ax || A.has M.entrypoint ax then [] 
           else [seq_idx_local, T.Int])
           
 			~new_local_decls:

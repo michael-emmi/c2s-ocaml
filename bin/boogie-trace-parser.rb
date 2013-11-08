@@ -3,11 +3,11 @@
 require_relative 'prelude'
 
 module BoogieTraceParser
-  attr_accessor :has_rounds
+  attr_accessor :blah
   
   def options(opts)
-    opts.on("--[no]concurrency", "Process c2s concurrency, e.g. rounds, delays.") do |b|
-      @has_rounds = b
+    opts.on("--[no]blah", "Blah blah BLAH") do |b|
+      @blah = b
     end
   end
   
@@ -66,8 +66,9 @@ module BoogieTraceParser
     
     following(/Boogie program verifier version/)
     see(/This assertion might not hold./)
-    trace
-    see(/Boogie program verifier finished/)
+    rounds = trace
+
+    # rounds.each_index {|r| puts "ROUND #{r}", indent(rounds[r])}
 
     "digraph G { \
       \n  node [shape = record];
@@ -75,25 +76,70 @@ module BoogieTraceParser
     \n}"
   end
   
-  def trace
-    see(/Execution trace:/)
-    _ = procedure
+  def indent(trace)
+    indent_level = 0
+    trace.map do |line|
+      line = (" " * indent_level) + line
+      indent_level = 0 if line =~ /YIELD/
+      indent_level += 2 if line =~ /call/
+      indent_level -= 2 if line =~ /return/ && indent_level > 1
+      line
+    end
   end
   
+  def trace
+    see(/Execution trace:/)
+    _, _, rounds = procedure
+    return rounds
+  end
+
+  def step(str, *dest)
+    dest.each do |d|
+      d << str
+    end
+  end
+  
+  def sequence_rounds(before, after)
+    0.upto([before.size, after.size].max - 1).map do |i|
+      (before[i] || []).concat(after[i] || [])
+    end
+  end
+
   def procedure(name = nil)
     me = node
     stmts = []
-    round_known = !name
+    seq = name ? nil : 0
+    round = name ? nil : 0
+    rounds = [[]]
+    after = [[]]
+    has_yielded = false
     
     until !(line = @lines.shift.chomp) ||
-      (name && line =~ /Inlined call to procedure .* ends/) ||
       (!name && line.empty?) ||
       (!name && line =~ /Boogie program verifier finished/) do
         
-      next if line.match /Inlined call to procedure (.*) begins/ do |m|
-        stmts << "call #{m[1]}"
-        child = procedure m[1]
+      break if line.match /Inlined call to procedure .* ends/ do
+        step "return", rounds[round]
+      end
+        
+      next if line.match /Inlined call to procedure (.*) begins/ do |m|        
+        is_async = next_val.to_i != seq
+
+        step "#{is_async ? "async" : "call"} #{m[1]}", stmts, rounds[round]
+        child, their_round, their_rounds = procedure m[1]
         @tree << "#{me} -> #{child};"
+        
+        if is_async then
+          step "begin #{m[1]}", after[round]
+          after = sequence_rounds(after, their_rounds)
+        else
+          round = their_round
+          rounds[ round ] ||= []
+          step "begin #{m[1]}", rounds[round]
+          rounds = sequence_rounds(rounds, their_rounds)
+        end
+
+        true
       end
       
       next if line.match /value = T@\$mop!val!(\d+)/ do |m|
@@ -106,31 +152,36 @@ module BoogieTraceParser
         val = "#{val} (#{@addrs[val]})" if @addrs[val]
 
         if kind == :read
-          stmts << "read M[#{addr}] = #{val}"
+          step "read M[#{addr}] = #{val}", stmts, rounds[round]
         else
-          stmts << "write M[#{addr}] := #{val}"
+          step "write M[#{addr}] := #{val}", stmts, rounds[round]
         end
       end
       
       next if line.match /value = (.*)/ do |m|
-        # val = m[1].gsub(/[() ]/,"")
         rec = @exprs.shift
-        if round_known then
-          # stmts << "val: #{val}"
-          stmts << "echo #{rec[:expr]}:#{rec[:type]} = #{rec[:val]}"
+        
+        if name && !seq then
+          seq = rec[:val].to_i
+        
+        elsif name && !round then
+          round = rec[:val].to_i
+          rounds[ round ] ||= []
+          step "|ROUND #{round}", stmts
+          step "RESUME #{name}", rounds[round] if has_yielded
+
         else
-          if stmts.last then stmts.last << " ROUND #{rec[:val]} "
-          else stmts << " ROUND #{rec[:val]} "
-          end
-          round_known = true
+          step "echo #{rec[:expr]}:#{rec[:type]} = #{rec[:val]}", stmts, rounds[round]
         end
+        true
       end
       
       next if line.match /(\S+\.bpl)\((\d)+,(\d)+\): ~yield/ do |m|
         @block = {file: m[1], line: m[2].to_i, col: m[3].to_i}
         @exprs = recorded_exprs
-        round_known = false
-        stmts.last << "|"
+        step "YIELD", rounds[round]
+        has_yielded = true
+        round = nil
       end
       
       next if line.match /(\S+\.bpl)\((\d+),(\d+)\): .*/ do |m|
@@ -142,8 +193,18 @@ module BoogieTraceParser
       err "unexpected line: #{line}"
     end
     
-    @tree << "#{me} [label=\"{#{name || "top"} | #{stmts * '\l'} }\"];"
-    return me
+    @tree << "#{me} [label=\"{#{name || "top|"} #{stmts * '\l'} }\"];"
+    return me, round, sequence_rounds(rounds, after)
+  end
+  
+  def next_val
+    val = nil
+    @lines.each do |line|
+      break if line.match /value = (.*)/ do |m|
+        val = m[1]
+      end      
+    end
+    val
   end
   
   def recorded_exprs
