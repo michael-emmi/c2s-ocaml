@@ -4,6 +4,19 @@ require 'eventmachine'
 require 'optparse'
 require 'colorize'
 require 'curses'
+require 'set'
+
+def err( msg )
+  puts "Error: #{msg}".red
+  exit -1
+end
+
+def warn( msg )
+  @warned ||= Set.new
+  return if @warned.include? msg
+  puts "Warning: #{msg}".yellow
+  @warned.add msg
+end
 
 module Tool
   
@@ -52,7 +65,7 @@ module Tool
         end
       end
     end.parse!
-
+    
     t0 = Time.now()
     yield if block_given?
     puts "#{File.basename $0} finished in #{(Time.now() - t0).round(2)}s." unless @quiet
@@ -66,6 +79,7 @@ module Tool
   def tempfile(f)
     @tempfiles = [] unless @tempfiles
     @tempfiles << f
+    f
   end
   
   def task(desc = "This")
@@ -81,15 +95,5 @@ module Tool
       end
     end
     return res
-  end
-  
-  def err( msg )
-    puts "Error: #{msg}".red
-    exit -1
-  end
-
-  def warn( msg )
-    puts "Warning: #{msg}".yellow
-  end
-  
+  end    
 end
