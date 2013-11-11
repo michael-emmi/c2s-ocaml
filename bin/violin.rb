@@ -38,6 +38,7 @@ if __FILE__ == $0 then
   include Violin
   include DelayBounding
   include Verifier
+  include BoogieTraceParser
   version 0.9
   
   run do

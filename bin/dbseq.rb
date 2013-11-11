@@ -48,6 +48,7 @@ if __FILE__ == $0 then
   include Tool
   include DelayBounding
   include Verifier
+  include BoogieTraceParser
   version 1.0
   
   run do

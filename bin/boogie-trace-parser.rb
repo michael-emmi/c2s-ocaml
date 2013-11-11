@@ -193,7 +193,7 @@ module BoogieTraceParser
           end
         end
       rescue
-        warn "could not open BPL source file '#{bpl_block[:file]}'"
+        warn "could not open BPL source file '#{bplfile}'"
       end
       return exprs
     end

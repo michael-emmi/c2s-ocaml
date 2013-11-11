@@ -45,6 +45,7 @@ if __FILE__ == $0 then
   include Tool
   include RppSeq
   include Verifier
+  include BoogieTraceParser
   version 0.1
   
   run do

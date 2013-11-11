@@ -49,6 +49,7 @@ if __FILE__ == $0 then
   include Clang2Bpl
   include DelayBounding
   include Verifier
+  include BoogieTraceParser
   include Trombone
   version 0.9
   
