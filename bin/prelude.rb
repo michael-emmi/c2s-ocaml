@@ -86,9 +86,10 @@ module Tool
     t = Time.now
     res = nil
     EventMachine.run do
-      EventMachine.defer do        
+      EventMachine.defer do
         res = yield if block_given?
         EventMachine.stop
+        puts
       end
       EventMachine.add_periodic_timer( 1 ) do
         print "#{desc} has been running for #{(Time.now - t).round} seconds so far...\r".red

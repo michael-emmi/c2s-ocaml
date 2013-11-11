@@ -187,6 +187,7 @@ module BoogieTraceParser
         File.new(bplfile,'r').each_line do |line|
           break unless exprs.size < num_vals
           next if (line_no += 1) < bplline
+          break if line =~ /^[$]bb\d+:/
           line.match /call\s+boogie_si_record_(\S+)\s*\((.*)\)\s*;/ do |m|
             val = lines[exprs.size].match(/value = (.*)/){|m| m[1].gsub(/[() ]/,"")}
             exprs << {expr: m[2], type: m[1], val: val}

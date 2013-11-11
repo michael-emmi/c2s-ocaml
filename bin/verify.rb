@@ -81,7 +81,8 @@ module Verifier
     if not $?.success? then
       err "problem with Boogie: #{output}"
     else
-      if @graph && output =~ /[1-9][0-9]* errors?/ then
+      if @graph && output =~ /[1-9]\d* errors?/ then
+        puts "Rendering error trace.." unless @quiet
         File.open("#{src}.trace",'w'){|f| f.write(output) }
         showtrace "#{src}.trace"
       else
