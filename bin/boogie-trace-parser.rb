@@ -47,10 +47,10 @@ module BoogieTraceParser
 
     if @memory_graphs then
       id = 0
-      memory_log(unscramble(IO.readlines(tracefile))).each do |m|
+      complete_log(unscramble(IO.readlines(tracefile))).each do |m|
         dotfiles << tempfile( "#{File.basename(tracefile,".trace")}.mem#{id += 1}.dot" )
         File.open(dotfiles.last,'w') do |f|
-          f.write( graph_of_memory(m) )
+          f.write( graph_of_log_entry(m) )
         end
       end
     end
@@ -283,12 +283,17 @@ module BoogieTraceParser
     
     parser.on_procedure_begin do |procname, is_async, seq, round|
       bin = log(unscrambled, parser.curr_round_no, parser.curr_seq_no)
-      bin << "call #{procname}"
+      bin << {
+        task: parser.curr_seq_no, 
+        step: is_async ?
+          "async/#{seq} #{procname}" :
+          "call #{procname}"
+      }
     end
     
     parser.on_procedure_end do |procname|
       bin = log(unscrambled, parser.curr_round_no, parser.curr_seq_no)
-      bin << "return from #{procname}"
+      bin << {task: parser.curr_seq_no, step: "return from #{procname}"}
     end
     
     parser.on_block do |bplfile, line, column, label|
@@ -296,29 +301,121 @@ module BoogieTraceParser
     
     parser.on_memory_operation do |kind, addr, val|
       bin = log(unscrambled, parser.curr_round_no, parser.curr_seq_no)
-      if kind == :read
-        bin << "read M[#{addr}] = #{val}"
-      else
-        bin << "write M[#{addr}] := #{val}"
-      end
+      bin << {
+        task: parser.curr_seq_no, 
+        step: (kind == :read) ?
+          "read M[#{addr}] = #{val}" :
+          "write M[#{addr}] := #{val}"
+      }
     end
     
     parser.on_recorded_value do |rec|
+      bin = log(unscrambled, parser.curr_round_no, parser.curr_seq_no)
+      bin << {
+        task: parser.curr_seq_no,
+        step: rec[:expr] ?
+          "echo #{rec[:expr]}:#{rec[:type]} = #{rec[:val]}" :
+          "echo #{rec[:val]}"
+      }
     end
     
     parser.on_yield do |next_round|
       bin = log(unscrambled, parser.curr_round_no, parser.curr_seq_no)
-      next_bin = log(unscrambled, next_round, parser.curr_seq_no)
-      bin << "yield"
-      next_bin << "resume #{parser.curr_proc_name}/#{parser.curr_seq_no}"
+      # next_bin = log(unscrambled, next_round, parser.curr_seq_no)
+      # bin << "yield"
+      # next_bin << "resume #{parser.curr_proc_name}/#{parser.curr_seq_no}"
+      bin << {task: parser.curr_seq_no, step: "yield"}
     end
     
-    unscrambled.each do |r|
+    parser.parse(lines)
+    unscrambled.flatten!
+    unscrambled.compact!
+    return unscrambled
+  end
+  
+  def complete_log(unscrambled_trace)
+    log = []
+    stacks = {}
+    stacks[active_task = 0] = []
+    memory = {}
+    
+    unscrambled_trace.each do |step|
+      active_task = step[:task]
+      current_step = step[:step]
       
-    end
+      if m = current_step.match(/call (.*)/) then
+        stacks[active_task] << m[1]
 
-    parser.parse(lines)    
-    return unscrambled.flatten.compact
+      elsif current_step.match(/return/) then
+        stacks[active_task].pop
+      
+      elsif m = current_step.match(/async\/(.*) (.*)/) then
+        task_id = m[1].to_i
+        stacks[task_id] = [m[2]]
+
+      elsif current_step.match(/read/) then
+        
+      elsif m = current_step.match(/write M\[(.*)\] := (.*)/) then
+        memory[m[1]] = m[2]
+      end
+      
+      stacks_clone = {}
+      stacks.each do |idx,stack|
+        stacks_clone[idx] = stack.clone
+      end
+
+      log << {
+        active_task: active_task, 
+        current_step: current_step, 
+        stacks: stacks_clone,
+        memory: memory.clone
+      }
+    end
+    return log
+  end
+  
+  def graph_of_log_entry(log_entry)
+
+    unique_node_id = 0
+    active_node = 0
+
+    names = {}
+    stack_nodes = []
+    stack_edges = []
+    mem_nodes = []
+    mem_edges = []
+    
+    log_entry[:stacks].each_pair do |idx,stack|
+      node_name = "n#{unique_node_id += 1}"
+      stack_nodes << "#{node_name} [label=\"{ #{stack.reverse * " | "} | (TASK #{idx})}\"]"
+      stack_edges << "#{active_node} -> #{node_name}" if idx == log_entry[:active_task]
+    end
+    
+    log_entry[:memory].each do |addr,val|
+      left = names[addr] || names[addr] = "n#{unique_node_id += 1}"
+      right = names[val] || names[val] = "n#{unique_node_id += 1}"
+      mem_edges << "#{left} -> #{right};"
+    end
+    names.each do |name,node|
+      mem_nodes << "#{node} [label=\"#{name}\"];"
+    end
+    
+    "digraph G {
+      subgraph cluster_stacks {
+        node [shape = record];
+        label = \"TASKS\";
+        #{active_node} [label=\" #{log_entry[:current_step]} \"];
+        #{stack_nodes * "\n"}
+        #{stack_edges * "\n"}
+      }
+      subgraph cluster_memory {
+        node [shape = oval];
+        label = \"MEMORY\";
+        #{mem_nodes * "\n"}
+        #{mem_edges * "\n"}
+      }
+    }\n"
+    
   end
   
   def memory_log(unscrambled_trace)
@@ -326,7 +423,7 @@ module BoogieTraceParser
     memory = {}
     log << memory.clone
     unscrambled_trace.each do |line|
-      line.match(/write M\[(.*)\] := (.*)/) do |m|
+      line[:step].match(/write M\[(.*)\] := (.*)/) do |m|
         memory[m[1]] = m[2]
         log << memory.clone
       end
