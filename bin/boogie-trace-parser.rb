@@ -67,6 +67,14 @@ module BoogieTraceParser
       puts cmd if @verbose
       err "could not generate SVG image" unless system(cmd)
     end
+    htmlfile = File.basename(dotfiles.first,".dot") + ".html"
+    File.open(htmlfile,'w') do |f|
+      f.write(
+        "<html><head></head><body>
+          #{svgfiles.map do |svg| "<object id=\"object\" type=\"image/svg+xml\" data=\"#{svg}\"></object>" end * "\n"}
+        </body></html>"
+      )
+    end
     return svgfiles
   end
   
@@ -401,18 +409,20 @@ module BoogieTraceParser
     end
     
     "digraph G {
-      subgraph cluster_stacks {
-        node [shape = record];
-        label = \"TASKS\";
-        #{active_node} [label=\" #{log_entry[:current_step]} \"];
-        #{stack_nodes * "\n"}
-        #{stack_edges * "\n"}
-      }
-      subgraph cluster_memory {
-        node [shape = oval];
-        label = \"MEMORY\";
-        #{mem_nodes * "\n"}
-        #{mem_edges * "\n"}
+      subgraph cluster_entry {
+        subgraph cluster_memory {
+          node [shape = oval];
+          label = \"MEMORY\";
+          #{mem_nodes * "\n"}
+          #{mem_edges * "\n"}
+        }
+        subgraph cluster_stacks {
+          node [shape = record];
+          label = \"TASKS\";
+          #{active_node} [label=\" #{log_entry[:current_step]} \"];
+          #{stack_nodes * "\n"}
+          #{stack_edges * "\n"}
+        }
       }
     }\n"
     
