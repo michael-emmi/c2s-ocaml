@@ -25,11 +25,11 @@ class String
 end
 
 module BoogieTraceParser
-  attr_accessor :memory_graphs
+  attr_accessor :step_by_step
   
   def options(opts)
-    opts.on("--[no-]memory-graphs", "Generate graphs of memory.") do |g|
-      @memory_graphs = g
+    opts.on("--[no-]step-by-step", "Visualize of each step of the trace.") do |g|
+      @step_by_step = g
     end
   end
   
@@ -45,7 +45,7 @@ module BoogieTraceParser
       f.write( build_graph(IO.readlines(tracefile)) )
     end
 
-    if @memory_graphs then
+    if @step_by_step then
       id = 0
       complete_log(unscramble(IO.readlines(tracefile))).each do |m|
         dotfiles << tempfile( "#{File.basename(tracefile,".trace")}.mem#{id += 1}.dot" )
@@ -58,7 +58,7 @@ module BoogieTraceParser
     return dotfiles
   end
   
-  def dot2svg(dotfiles)
+  def render_graphs(dotfiles)
     svgfiles = []
     dotfiles.each do |dotfile|
       print "generating graph: #{dotfile.abbreviate(40)}\r" if dotfiles.size > 1
@@ -67,23 +67,26 @@ module BoogieTraceParser
       puts cmd if @verbose
       err "could not generate SVG image" unless system(cmd)
     end
+    
     htmlfile = File.basename(dotfiles.first,".dot") + ".html"
+
     File.open(htmlfile,'w') do |f|
-      f.write(
-        "<html><head></head><body>
-          #{svgfiles.map do |svg| "<object id=\"object\" type=\"image/svg+xml\" data=\"#{svg}\"></object>" end * "\n"}
-        </body></html>"
-      )
+      f.write "<html><head></head><body>"
+      svgfiles.each do |svg|
+        f.write "<object id='object' type='image/svg+xml' data='#{svg}'></object>"
+      end
+      f.write "</body></html>"
     end
-    return svgfiles
+
+    return htmlfile
   end
   
-  def opensvg(svgfiles)
-    err "could not open graph image" unless system("open #{svgfiles.first}")
+  def open_image(htmlfile)
+    err "could not open graph image" unless system("open #{htmlfile}")
   end
   
   def showtrace(tracefile)
-    opensvg( dot2svg( trace2dot(tracefile) ) )
+    open_image( render_graphs( trace2dot(tracefile) ) )
   end
   
   class Parser
@@ -385,41 +388,48 @@ module BoogieTraceParser
   def graph_of_log_entry(log_entry)
 
     unique_node_id = 0
-    active_node = 0
+    active_node = "active"
 
-    names = {}
     stack_nodes = []
     stack_edges = []
+    mem_names = {}
     mem_nodes = []
     mem_edges = []
     
+    stack_nodes << "#{active_node} [label=\" #{log_entry[:current_step]} \", color=none]"
+    
     log_entry[:stacks].each_pair do |idx,stack|
-      node_name = "n#{unique_node_id += 1}"
-      stack_nodes << "#{node_name} [label=\"{ #{stack.reverse * " | "} | (TASK #{idx})}\"]"
-      stack_edges << "#{active_node} -> #{node_name}" if idx == log_entry[:active_task]
+      stack_node = "n#{unique_node_id += 1}"
+      task_node = "n#{unique_node_id += 1}"
+      stack_nodes << "#{stack_node} [label=\" { #{stack.reverse * " | "} } \"]"
+      is_active = idx == log_entry[:active_task]
+      stack_nodes << "#{task_node} [label=\" TASK #{idx} \", shape=#{is_active ? "egg" : "none"} ]"
+      stack_edges << "#{active_node} -> #{stack_node} [style=invis]"
+      stack_edges << "#{stack_node} -> #{task_node} [dir=back]"
     end
     
     log_entry[:memory].each do |addr,val|
-      left = names[addr] || names[addr] = "n#{unique_node_id += 1}"
-      right = names[val] || names[val] = "n#{unique_node_id += 1}"
+      left = mem_names[addr] || mem_names[addr] = "n#{unique_node_id += 1}"
+      right = mem_names[val] || mem_names[val] = "n#{unique_node_id += 1}"
       mem_edges << "#{left} -> #{right};"
     end
-    names.each do |name,node|
+    mem_names.each do |name,node|
       mem_nodes << "#{node} [label=\"#{name}\"];"
     end
     
     "digraph G {
       subgraph cluster_entry {
         subgraph cluster_memory {
+          graph [style=dotted, ordering=out];
           node [shape = oval];
           label = \"MEMORY\";
           #{mem_nodes * "\n"}
           #{mem_edges * "\n"}
         }
         subgraph cluster_stacks {
+          graph [style=dotted, ordering=out];
           node [shape = record];
           label = \"TASKS\";
-          #{active_node} [label=\" #{log_entry[:current_step]} \"];
           #{stack_nodes * "\n"}
           #{stack_edges * "\n"}
         }
