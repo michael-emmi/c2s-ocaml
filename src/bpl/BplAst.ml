@@ -307,7 +307,7 @@ end = struct
 		    <+> ( sep << punctuate comma
 				  << List.map (Either.reduce
 								   Expression.print
-								   text)
+								   (double_quotes << text))
 				  <|ax ) )
 	let print_seq = sep << List.map print
 	let to_string = render << print
