@@ -48,7 +48,7 @@ module BoogieTraceParser
     if @step_by_step then
       id = 0
       complete_log(unscramble(IO.readlines(tracefile))).each do |m|
-        dotfiles << tempfile( "#{File.basename(tracefile,".trace")}.mem#{id += 1}.dot" )
+        dotfiles << tempfile( "#{File.basename(tracefile,".trace")}.step#{id += 1}.dot" )
         File.open(dotfiles.last,'w') do |f|
           f.write( graph_of_log_entry(m) )
         end
@@ -94,6 +94,8 @@ module BoogieTraceParser
       @procs = []
       @seqs = []
       @rounds = []
+      @bpl_locs = []
+      @src_locs = []
       @callbacks = {
         trace_begin: [], trace_end: [],
         procedure_begin: [], procedure_end: [],
@@ -111,9 +113,19 @@ module BoogieTraceParser
     def curr_proc_name ; @procs.last end
     def curr_seq_no ; @seqs.last end
     def curr_round_no ; @rounds.last end
-
-    def parse(lines)
+    def curr_source_code ; get_source_code(get_source_loc(@bpl_locs[-1])) end
     
+    def push(proc_name, seq_no, round_no)
+      @procs << proc_name
+      @seqs << seq_no
+      @rounds << round_no
+      @bpl_locs << nil
+      @src_locs << nil
+    end
+    
+    def pop ; [@procs, @seqs, @rounds, @bpl_locs, @src_locs].each &:pop end
+    
+    def parse(lines)
       block_exprs = []
 
       loop do
@@ -123,49 +135,44 @@ module BoogieTraceParser
         next if line.match /Boogie program verifier version .*/
         next if line.match /This assertion might not hold./
       
-        next if line.match /Execution trace:/ do
-          @procs << "top"
-          @seqs << 0
-          @rounds << 0
+        if line.match /Execution trace:/ then
+          push("top", 0, 0)
           @callbacks[:trace_begin].each {|b| b.call}
-        end
+          next
       
-        break if line.match /Boogie program verifier finished/ do
+        elsif line.match /Boogie program verifier finished/ then
           @callbacks[:trace_end].each {|b| b.call}
-          @procs.pop
-          @seqs.pop
-          @rounds.pop
-        end
-              
-        next if line.match /Inlined call to procedure (.*) begins/ do |m|
+          pop
+          break
+
+        elsif m = line.match(/Inlined call to procedure (.*) begins/) then
           seq = lines.delete_first_match(/value = (.*)/){|m| m[1].to_i}
           round = lines.delete_first_match(/value = (.*)/){|m| m[1].to_i}
           is_async = seq != @seqs.last
 
           @callbacks[:procedure_begin].each {|b| b.call(m[1], is_async, seq, round)}
-          @procs << m[1]
-          @seqs << seq
-          @rounds << round
-        end
-        
-        next if line.match /Inlined call to procedure (.*) ends/ do |m|
+          push(m[1],seq,round)
+          next
+
+        elsif m = line.match(/Inlined call to procedure (.*) ends/) then
           @callbacks[:procedure_end].each {|b| b.call(m[1])}
-          @procs.pop
-          @seqs.pop
-          @rounds.pop
-        end      
-      
-        next if line.match /(\S+\.bpl)\((\d+),(\d+)\): (\S*)/ do |m|
-          block_exprs = recorded_exprs(m[1], m[2].to_i, lines)
+          pop
+          next
+
+        elsif m = line.match(/(\S+\.bpl)\((\d+),(\d+)\): (\S*)/) then
+          @bpl_locs[-1] = { file: m[1], line: m[2].to_i, col: m[3].to_i, label: m[4] }
+          @src_locs[-1] = get_source_loc @bpl_locs.last
+
+          block_exprs = recorded_exprs(@bpl_locs.last, lines)
           if m[4] =~ /~yield/
             round = lines.delete_first_match(/value = (.*)/){|m| m[1].to_i}
             @callbacks[:yield].each {|b| b.call(round)}
             @rounds[-1] = round
           end
           @callbacks[:block].each {|b| b.call(m[1], m[2].to_i, m[3].to_i, m[4])}
-        end
-      
-        next if line.match /value = T@\$mop!val!(\d+)/ do |m|
+          next
+
+        elsif m = line.match(/value = T@\$mop!val!(\d+)/) then
           unless lines.size > 3 && lines.take(3).all? {|line| line =~ /value = .*/} then
             warn "unexpected memory operation format."
           else
@@ -177,27 +184,63 @@ module BoogieTraceParser
             # val = "#{val} (#{@addrs[val]})" if @addrs[val]
             @callbacks[:memory_operation].each {|b| b.call(kind, addr, val)}
           end
-          true
-        end
-      
-        next if line.match /value = (.*)/ do |m|
+          next
+
+        elsif m = line.match(/value = (.*)/) then
           rec = block_exprs.shift || {val: m[1]}
           @callbacks[:recorded_value].each {|b| b.call(rec)}
+          next
+
+        else
+          warn "unexpected line: #{line}"
         end
-      
-        warn "unexpected line: #{line}"
       end
     end
 
-    private  
-    def recorded_exprs(bplfile, bplline, lines)
+    private
+    
+    def get_source_code(src_loc)
+      return nil unless src_loc
+
+      code = nil
+      begin
+        line_no = 0
+        File.new(src_loc[:file],'r').each_line do |line|
+          next if (line_no += 1) < src_loc[:line]
+          code = line
+          break
+        end
+      rescue
+        warn "could not read (C) source file '#{src_loc[:file]}'"
+      end
+      return code
+    end
+    
+    def get_source_loc(bpl_loc)
+      src_loc = nil
+      begin
+        line_no = 0
+        File.new(bpl_loc[:file],'r').each_line do |line|
+          next if (line_no += 1) < bpl_loc[:line]
+          break if line =~ /^[$]bb\d+:/
+          break if line.match /\{:sourceloc (.*), (\d+), (\d+)\}/ do |m|
+            src_loc = { file: m[1], line: m[2].to_i, col: m[3].to_i }
+          end
+        end
+      rescue
+        warn "could not open BPL source file '#{bpl_loc[:file]}'"
+      end
+      return src_loc
+    end
+    
+    def recorded_exprs(bpl_loc, lines)
       num_vals = lines.index{|l| l !~ /value = .*/}
       line_no = 0
       exprs = []
       begin
-        File.new(bplfile,'r').each_line do |line|
+        File.new(bpl_loc[:file],'r').each_line do |line|
           break unless exprs.size < num_vals
-          next if (line_no += 1) < bplline
+          next if (line_no += 1) < bpl_loc[:line]
           break if line =~ /^[$]bb\d+:/
           line.match /call\s+boogie_si_record_(\S+)\s*\((.*)\)\s*;/ do |m|
             val = lines[exprs.size].match(/value = (.*)/){|m| m[1].gsub(/[() ]/,"")}
@@ -205,7 +248,7 @@ module BoogieTraceParser
           end
         end
       rescue
-        warn "could not open BPL source file '#{bplfile}'"
+        warn "could not open BPL source file '#{bpl_loc[:file]}'"
       end
       return exprs
     end
@@ -277,6 +320,8 @@ module BoogieTraceParser
 
   def unscramble(lines)
     unscrambled = []
+    
+    global_addrs = get_global_addrs( get_bpl_files(lines))
   
     def log(struct, i, j)
       struct[i] ||= []
@@ -295,7 +340,8 @@ module BoogieTraceParser
     parser.on_procedure_begin do |procname, is_async, seq, round|
       bin = log(unscrambled, parser.curr_round_no, parser.curr_seq_no)
       bin << {
-        task: parser.curr_seq_no, 
+        task: parser.curr_seq_no,
+        code: parser.curr_source_code,
         step: is_async ?
           "async/#{seq} #{procname}" :
           "call #{procname}"
@@ -312,8 +358,10 @@ module BoogieTraceParser
     
     parser.on_memory_operation do |kind, addr, val|
       bin = log(unscrambled, parser.curr_round_no, parser.curr_seq_no)
+      addr = "#{global_addrs[addr]}:#{addr}" if global_addrs.include? addr
       bin << {
         task: parser.curr_seq_no, 
+        code: parser.curr_source_code,
         step: (kind == :read) ?
           "read M[#{addr}] = #{val}" :
           "write M[#{addr}] := #{val}"
@@ -324,6 +372,7 @@ module BoogieTraceParser
       bin = log(unscrambled, parser.curr_round_no, parser.curr_seq_no)
       bin << {
         task: parser.curr_seq_no,
+        code: parser.curr_source_code,
         step: rec[:expr] ?
           "echo #{rec[:expr]}:#{rec[:type]} = #{rec[:val]}" :
           "echo #{rec[:val]}"
@@ -335,7 +384,7 @@ module BoogieTraceParser
       # next_bin = log(unscrambled, next_round, parser.curr_seq_no)
       # bin << "yield"
       # next_bin << "resume #{parser.curr_proc_name}/#{parser.curr_seq_no}"
-      bin << {task: parser.curr_seq_no, step: "yield"}
+      bin << {task: parser.curr_seq_no, code: parser.curr_source_code, step: "yield"}
     end
     
     parser.parse(lines)
@@ -351,8 +400,10 @@ module BoogieTraceParser
     memory = {}
     
     unscrambled_trace.each do |step|
+      
       active_task = step[:task]
       current_step = step[:step]
+      current_code = step[:code]
       
       if m = current_step.match(/call (.*)/) then
         stacks[active_task] << m[1]
@@ -377,7 +428,8 @@ module BoogieTraceParser
 
       log << {
         active_task: active_task, 
-        current_step: current_step, 
+        current_step: current_step,
+        source_code: current_code,
         stacks: stacks_clone,
         memory: memory.clone
       }
@@ -396,7 +448,9 @@ module BoogieTraceParser
     mem_nodes = []
     mem_edges = []
     
-    stack_nodes << "#{active_node} [label=\" #{log_entry[:current_step]} \", color=none]"
+    code = log_entry[:source_code]
+    
+    stack_nodes << "#{active_node} [label=\" #{code || ""} #{log_entry[:current_step]} \", color=none]"
     
     log_entry[:stacks].each_pair do |idx,stack|
       stack_node = "n#{unique_node_id += 1}"
@@ -445,51 +499,19 @@ module BoogieTraceParser
     
   end
   
-  def memory_log(unscrambled_trace)
-    log = []
-    memory = {}
-    log << memory.clone
-    unscrambled_trace.each do |line|
-      line[:step].match(/write M\[(.*)\] := (.*)/) do |m|
-        memory[m[1]] = m[2]
-        log << memory.clone
+  def get_bpl_files(lines)
+    bplfiles = Set.new
+    lines.each do |line|
+      line.match /(\S*.bpl)\(\d+,\d+\):/ do |m|
+        bplfiles << m[1]
       end
     end
-    log
+    return bplfiles.to_a
   end
   
-  def graph_of_memory(memory)
-    unique_node_id = 0
-    names = {}
-    nodes = []
-    edges = []
-    memory.each do |addr,val|
-      left = names[addr] || names[addr] = "n#{unique_node_id += 1}"
-      right = names[val] || names[val] = "n#{unique_node_id += 1}"
-      edges << "#{left} -> #{right};"
-    end
-    names.each do |name,node|
-      nodes << "#{node} [label=\"#{name}\"];"
-    end
-    
-    "digraph G {
-      node [shape = record];
-      #{nodes * "\n"}
-      #{edges * "\n"}
-    }\n"
-  end
-  
-  def global_addrs
+  def get_global_addrs(bplfiles)
     addrs = {}
-    bplfile = nil
-    @lines.each do |line|
-      break if line.match /(\S*.bpl)\(\d+,\d+\):/ do |m|
-        bplfile = m[1]
-      end
-    end    
-    unless bplfile
-      warn "could not determine BPL source file."
-    else 
+    bplfiles.each do |bplfile|
       begin
         File.new(bplfile).each_line do |line|
           line.match /axiom (\S+) == (-\d+);/ do |m|
