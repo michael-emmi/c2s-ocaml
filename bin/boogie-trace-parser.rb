@@ -408,13 +408,20 @@ module BoogieTraceParser
       stack_edges << "#{stack_node} -> #{task_node} [dir=back]"
     end
     
+    curr_addr = curr_val = nil
+    log_entry[:current_step].match(/M\[(.*)\] :?= (.*)/) do |m|
+      curr_addr = m[1]
+      curr_val = m[2]
+    end
+    
     log_entry[:memory].each do |addr,val|
       left = mem_names[addr] || mem_names[addr] = "n#{unique_node_id += 1}"
       right = mem_names[val] || mem_names[val] = "n#{unique_node_id += 1}"
       mem_edges << "#{left} -> #{right};"
     end
     mem_names.each do |name,node|
-      mem_nodes << "#{node} [label=\"#{name}\"];"
+      highlighted = name == curr_addr || name == curr_val
+      mem_nodes << "#{node} [label=\"#{name}\", shape=#{ highlighted ? "octagon" : "oval" }];"
     end
     
     "digraph G {
