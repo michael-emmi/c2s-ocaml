@@ -59,13 +59,21 @@ let rec commands : command list = [
 
   "async-to-seq-dfs", ("depth-first async-to-sequential call translation", [], 
   function [] ->
-    BplAsyncToSeq.async_to_seq
+    BplCompleteReturnAssignments.complete_returns
+    << BplAsyncToSeq.async_to_seq
+    | _ -> assert false
+  );
+  
+  "wait-elimination", ("compile away wait statements", [],
+  function [] ->
+    BplWaitElimination.eliminate_wait
     | _ -> assert false
   );
 
   "async-to-seq-wait", ("async-to-sequential call translation w/ wait", [], 
   function [] ->
-    BplAsyncWithWait.async_to_seq
+    BplCompleteReturnAssignments.complete_returns
+    << BplAsyncWithWait.async_to_seq
     | _ -> assert false
   );
 

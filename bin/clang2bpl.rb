@@ -57,24 +57,9 @@ module Clang2Bpl
     return "llvm-link"
   end
 
-  def llvmopt
-    err "cannot find LLVM's 'opt' in executable path." if `which opt`.empty?
-    return "opt"
-  end
-
-  def smacklib
-    # search the (Ruby) library path for the smack dynamic library
-    $:.each do |path|
-      ["smack.dylib", "smack.so", "smack.dll"].each do |lib|
-        return File.join(path,lib) if File.exists?(File.join(path,lib))
-      end
-    end
-    err "cannot find smack.{dylib,so,dll} in library path."
-  end
-
   def smack
-    return "#{llvmopt()} -load #{smacklib()} " \
-    "-internalize --mem2reg -die -lowerswitch -bpl_print -debug-only=bpl -debug -disable-output"
+    err "cannot find 'smack' in executable path." if `which smack`.empty?
+    return "smack"
   end
 
   def translate(sources)
@@ -103,7 +88,7 @@ module Clang2Bpl
 
     # 3. translate the bytecode to Boogie
     puts "* SMACK: #{bc} => #{bpl.blue}" unless @quiet
-    cmd = "#{smack()} #{@smack_opts * " "} #{bc} 2> #{bpl}"
+    cmd = "#{smack()} #{@smack_opts * " "} #{bc} -o #{bpl}"
     puts cmd if @verbose
     err "failed to translate bytecode to Boogie." unless system(cmd)
 

@@ -199,6 +199,25 @@ module BoogieTraceParser
 
     private
     
+    def each_bpl_line(bpl_file)
+      return unless block_given?
+      begin
+        File.new(bpl_file,'r').each_line do |line|
+          break unless yield line
+        end
+      rescue
+        warn "could not read BPL source file '#{src_loc[:file]}'"
+      end
+    end
+    
+    def get_bpl_code(bpl_loc)
+      line_no = 0
+      each_bpl_line(bpl_loc[:file]) do |line|
+         next true if line_no += 1 < bpl_loc[:line]
+         
+      end
+    end
+    
     def get_source_code(src_loc)
       return nil unless src_loc
 

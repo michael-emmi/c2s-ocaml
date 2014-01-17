@@ -46,7 +46,8 @@ CAML_LIB_OBJ = \
 	BplAst BplParser BplLexer BplUtils BplMarkers \
   BplInitAxioms \
 	BplIdentifyEntryPoints \
-  BplWrapEntrypoints BplYieldElimination BplAsyncToSeq BplAsyncWithWait \
+  BplWrapEntrypoints BplYieldElimination BplAsyncToSeq \
+	BplWaitElimination BplAsyncWithWait \
 	BplCompleteReturnAssignments \
 	BplAsserts BplBackend \
 	BplViolin

@@ -8,6 +8,7 @@ module RppSeq
     @c2s_opts = []
     @rounds = 1
     @delays = 0
+    @precompile_wait = false
 
     opts.separator ""
     opts.separator "Sequentialization options:"
@@ -18,6 +19,10 @@ module RppSeq
 
     opts.on("-d", "--delays MAX", Integer, "The delay bound (default 0)") do |d|
       @delays = d 
+    end
+    
+    opts.on("-w", "--precompile-wait", "Compile waits before sequentialization?") do |w|
+      @precompile_wait = true
     end
   end
 
@@ -31,7 +36,7 @@ module RppSeq
     puts "* c2s: #{src} => #{seq.blue}" unless @quiet
     cmd = "#{c2s()} load #{src} seq-framework " \
       "delay-bounding #{@rounds} #{@delays} " \
-      "async-to-seq-wait " \
+      "#{@precompile_wait ? "wait-elimination async-to-seq-dfs " : "async-to-seq-wait "}" \
       "prepare #{@verifier} " \
       "strip-internal-markers " \
       "print #{seq}"
