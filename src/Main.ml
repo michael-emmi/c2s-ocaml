@@ -47,7 +47,7 @@ let rec commands : command list = [
     BplInitAxioms.init_axioms_at_entry_points 
     << BplWrapEntrypoints.wrap_entrypoint_procedures
     << BplIdentifyEntryPoints.identify_entry_points
-    << BplCompleteReturnAssignments.complete_returns
+    (* << BplCompleteReturnAssignments.complete_returns *)
     | _ -> assert false
   );
 
@@ -59,8 +59,7 @@ let rec commands : command list = [
 
   "async-to-seq-dfs", ("depth-first async-to-sequential call translation", [], 
   function [] ->
-    BplCompleteReturnAssignments.complete_returns
-    << BplAsyncToSeq.async_to_seq
+    BplAsyncToSeq.async_to_seq
     | _ -> assert false
   );
   
@@ -72,15 +71,14 @@ let rec commands : command list = [
 
   "async-to-seq-wait", ("async-to-sequential call translation w/ wait", [], 
   function [] ->
-    BplCompleteReturnAssignments.complete_returns
-    << BplAsyncWithWait.async_to_seq
+    BplAsyncWithWait.async_to_seq
     | _ -> assert false
   );
 
   "prepare", ("prepare code for verifier (boogie_si or boogie_fi)", [S "BACK-END"], 
   function 
-    | [S "boogie_si"] -> BplBackend.for_boogie_si
-    | [S "boogie_fi"] -> BplBackend.for_boogie_fi
+    | [S "boogie_si"] -> BplBackend.for_boogie_si << BplCompleteReturnAssignments.complete_returns
+    | [S "boogie_fi"] -> BplBackend.for_boogie_fi << BplCompleteReturnAssignments.complete_returns
     | [S s] -> error "Invalid argument to 'prepare' command: %s" s; exit (-1)
     | _ -> assert false
   );

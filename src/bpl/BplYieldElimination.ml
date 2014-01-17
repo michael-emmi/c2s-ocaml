@@ -221,7 +221,7 @@ let delay_bounding rounds delays pgm =
           (* Pass the round index through calls. *)
     			(ls, S.Call (ax, n, ps@[E.ident round_idx],
             if A.has M.noyields ax then rs 
-            else if A.has M.async ax then rs@[ignore_round_idx]
+            else if A.has M.async ax then rs
             else rs@[round_idx])) :: []
         end
       

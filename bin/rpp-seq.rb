@@ -35,8 +35,9 @@ module RppSeq
     seq = "#{File.basename(src,'.bpl')}.RPPSEQ.#{@rounds}.#{@delays}.bpl"
     puts "* c2s: #{src} => #{seq.blue}" unless @quiet
     cmd = "#{c2s()} load #{src} seq-framework " \
+      "#{@precompile_wait ? "wait-elimination " : ""}" \
       "delay-bounding #{@rounds} #{@delays} " \
-      "#{@precompile_wait ? "wait-elimination async-to-seq-dfs " : "async-to-seq-wait "}" \
+      "#{@precompile_wait ? " async-to-seq-dfs " : "async-to-seq-wait "}" \
       "prepare #{@verifier} " \
       "strip-internal-markers " \
       "print #{seq}"
