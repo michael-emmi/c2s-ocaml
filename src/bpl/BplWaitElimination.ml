@@ -29,11 +29,20 @@ let eliminate_wait pgm =
       ( D.var result_var (T.map [T.Int] T.Int)
         :: D.var done_var (T.map [T.Int] T.Bool)
         :: D.var unique_id_var T.Int :: [] )
-      
+        
 		~new_proc_params: 
       (fun (ax,_,_) -> 
         if A.has M.leavealone ax then [] 
         else [self_var, T.Int])
+        
+    ~replace_local_decls:
+      (fun (ax,_,_) d ->
+        if A.has M.leavealone ax then []
+        else begin 
+          match d with
+          | D.Var (_,x,T.T ("task",_),_) -> (D.var x T.Int) :: []
+          | _ -> d :: [] 
+        end)
                 
     ~proc_before_return: (function 
       | (_,_,(_,_,rs,_,_)) -> 
@@ -53,16 +62,24 @@ let eliminate_wait pgm =
         :: (Ls.assume (E.forall ["t",T.Int] (E.sel (E.ident done_var) [E.ident "t"] |=| E.bool false)))
         :: []
     
-      | ls, S.Call (ax,n,ps,ret_var::rs) when A.has "async" ax ->
-        if List.length rs > 1 then
-          warn "Wait-Elimination does not handle multi-return async calls.";
+      | ls, S.Call (ax,n,ps,rs) when A.has "async" ax -> begin
+        
+        let aa = A.get "async" ax in
+        let ax = A.unit "async" :: A.strip "async" ax in
+          
+        match aa with
+        | [] -> 
+          (ls, S.Call (ax,n,ps@[E.num 0],rs)) :: []
 
-        (Ls.incr ~labels:ls (E.ident unique_id_var) 1)
-        :: (E.ident ret_var |:=| E.ident unique_id_var)
-        :: ([], S.Call (ax,n,ps@[E.ident ret_var],[])) :: []
+        | Left t :: [] ->
 
-      | ls, S.Call (ax,n,ps,[]) when A.has "async" ax ->
-        (ls, S.Call (ax,n,ps@[E.num 0],[])) :: []
+          (Ls.incr ~labels:ls (E.ident unique_id_var) 1)
+          :: (t |:=| E.ident unique_id_var)
+          :: ([], S.Call (ax,n,ps@[t],rs)) :: []
+        
+        | _ -> failwith "Wait-Elimination expects zero/one argument :async annotation."
+      end
+        
       | ls, S.Call (ax,n,ps,rs) ->
         (ls, S.Call (ax,n,ps@[E.num 0],rs)) :: []
       

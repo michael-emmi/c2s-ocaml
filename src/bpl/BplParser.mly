@@ -337,6 +337,11 @@ identifier:
 	ID { fst $1 }
 ;
 
+types_opt:
+  { [] }
+  | types { $1 }
+;
+
 types:
 	type_ { $1 :: [] }
   | type_ COMMA types { $1 :: $3 }
@@ -351,7 +356,7 @@ atom_type:
 	BOOL { Type.Bool }
   | INT { Type.Int }
   | BV { Type.Bv $1 }
-  | identifier { Type.T ($1,[]) }
+  | identifier types_opt { Type.T ($1,$2) }
 ;
 
 labeled_statements_opt:

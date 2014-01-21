@@ -306,6 +306,7 @@ and ProgramExt : sig
     ?new_proc_params: (proc_ctx -> (Identifier.t * Type.t) list) ->
     ?new_proc_rets: (proc_ctx -> (Identifier.t * Type.t) list) ->
     ?new_local_decls: (proc_ctx -> Declaration.t list) ->
+    ?replace_local_decls: (proc_ctx -> Declaration.t -> Declaration.t list) ->
     ?proc_body_prefix: (proc_ctx -> LabeledStatement.t list) ->
     ?proc_before_return: (proc_ctx -> LabeledStatement.t list) ->
     ?per_stmt_map: (proc_ctx -> LabeledStatement.t -> LabeledStatement.t list) ->
@@ -361,6 +362,7 @@ end = struct
 		?(new_proc_params = const [])
 		?(new_proc_rets = const [])
 		?(new_local_decls = const [])
+    ?(replace_local_decls = const List.unit)
 		?(proc_body_prefix = const [])
     ?(proc_before_return = const [])
 		?(per_stmt_map = const List.unit)
@@ -380,7 +382,11 @@ end = struct
 				and rs' = rs @ new_proc_rets (ax,n,p)
 
         and bd' = Option.map (fun (ds,ss) ->          
-				  ds @ new_local_decls (ax,n,p),
+				  ((List.flatten 
+            << map (fun d -> 
+              if ignore (D.attrs d) then [d] 
+              else replace_local_decls (ax,n,p) d) 
+            <| ds) @ new_local_decls (ax,n,p)),
                   
           (* Add the suffix just before each return statement.
             Note: we assume each procedure ends with a return. *)

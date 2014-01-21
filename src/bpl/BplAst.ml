@@ -110,7 +110,8 @@ module rec Expression : sig
 	val ident : Identifier.t -> t
 	val bool : bool -> t
 	val num : int -> t
-	
+  val fn : Identifier.t -> t list -> t
+  	
 	val conj: t list -> t
 	val disj: t list -> t
   val not_: t -> t
@@ -150,6 +151,8 @@ end = struct
  	let ident s = Id s
 	let bool b = Lit (if b then Literal.True else Literal.False)
 	let num n = Lit (Literal.Num (big_int_of_int n))
+  
+  let fn f xs = FnApp (f,xs)
   
 	let is_term = function
 		| Lit _ | Id _ | Old _ | FnApp _ 
@@ -697,6 +700,7 @@ module rec Procedure : sig
 	val signature : t -> Type.t list * Type.t list
   val params : t -> (Identifier.t * Type.t) list
   val returns : t -> (Identifier.t * Type.t) list
+  val decls : t -> Declaration.t list
 	val stmts : t -> LabeledStatement.t list
   
   val has_impl : t -> bool
@@ -724,6 +728,7 @@ end = struct
 	let signature (_,ps,rs,_,_) = List.map snd ps, List.map snd rs
   let params (_,ps,_,_,_) = ps
   let returns (_,_,rs,_,_) = rs
+  let decls (_,_,_,_,bd) = Option.list <| Option.map fst bd
 	let stmts (_,_,_,_,bd) = Option.list <| Option.map snd bd
   
   let has_impl (_,_,_,_,bd) = bd <> None
