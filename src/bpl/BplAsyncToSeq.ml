@@ -167,12 +167,12 @@ let async_to_seq pgm =
         
             match style with
             | SeparateProc ->
-              [Ls.call ~attrs:(A.strip M.async ax) (async n) ~params:ps ~returns:rs]
+              [Ls.call ~attrs:(A.strip M.async ax) (async n) ~params:ps ~returns:[]]
           
             | AtCallsite -> begin
               pause_segment
               @ begin_segment
-      	      @ [Ls.call ~attrs:[] n ~params:(ps@[E.ident seq_idx]) ~returns:rs]
+      	      @ [Ls.call ~attrs:[] n ~params:(ps@[E.ident seq_idx]) ~returns:[]]
               @ end_segment
               @ resume_segment
             end)
