@@ -146,7 +146,10 @@ let async_to_seq pgm =
               )) ps 
               in 
               
-              let rs = [ fst_of (id_of_expr t) ; snd_of (id_of_expr t) ] in
+              let rs = 
+                if List.length rs = 1 then [snd_of (id_of_expr t)]
+                else [ fst_of (id_of_expr t) ; snd_of (id_of_expr t) ]
+              in
         
               pause_segment
               @ begin_segment

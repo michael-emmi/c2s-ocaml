@@ -6,19 +6,19 @@ require_relative 'verify'
 module RppSeq
   def options(opts)
     @c2s_opts = []
-    @rounds = 1
+    @rounds = nil
     @delays = 0
     @precompile_wait = false
 
     opts.separator ""
     opts.separator "Sequentialization options:"
 
-    opts.on("-r", "--rounds MAX", Integer, "The rounds bound (default 1)") do |r|
+    opts.on("-r", "--rounds MAX", Integer, "The rounds bound (default DELAYS+1)") do |r|
       @rounds = r 
     end
 
     opts.on("-d", "--delays MAX", Integer, "The delay bound (default 0)") do |d|
-      @delays = d 
+      @delays = d
     end
     
     opts.on("-w", "--precompile-wait", "Compile waits before sequentialization?") do |w|
@@ -32,6 +32,7 @@ module RppSeq
   end
 
   def sequentialize(src)
+    @rounds ||= @delays + 1
     seq = "#{File.basename(src,'.bpl')}.RPPSEQ.#{@rounds}.#{@delays}.bpl"
     puts "* c2s: #{src} => #{seq.blue}" unless @quiet
     cmd = "#{c2s()} load #{src} seq-framework " \
