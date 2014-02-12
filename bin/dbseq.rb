@@ -9,7 +9,7 @@ module DelayBounding
 
   def options(opts)
     
-    @rounds = 1
+    @rounds = nil
     @delays = 0
 
     opts.separator ""
@@ -30,6 +30,7 @@ module DelayBounding
   end
 
   def sequentialize(src)
+    @rounds ||= @delays + 1
     seq = "#{File.basename(src,'.bpl')}.EQR.#{@rounds}.#{@delays}.bpl"
     puts "* c2s: #{src} => #{seq.blue}" unless @quiet
     cmd = "#{c2s} load #{src} seq-framework " \

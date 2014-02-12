@@ -227,6 +227,7 @@ end = struct
     | Proc (ax,n,(tx,ps,rs,sx,Some(ds,((_::_) as ss)))) as d ->
         begin match List.last ss with
         | _, Statement.Return -> d
+        | _, Statement.Goto _ -> d
         | _ -> Proc (ax,n,(tx,ps,rs,sx,Some(ds,ss@[LabeledStatement.return ()])))
         end 
     | d -> d

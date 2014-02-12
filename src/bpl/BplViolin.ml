@@ -9,6 +9,74 @@ open BplUtils.Abbreviations
 
 module M = BplMarkers
 
+let instrument p =
+
+  let methods = 
+    List.collect (function 
+      | D.Axiom (ax,_) when A.has "method" ax -> begin
+        match A.get "method" ax with
+        | [Right a; Right b] -> Some (b,a)
+        | _ -> warn "unexpected {:method ..} attribute."; None
+      end
+      | _ -> None
+    )
+    <| Program.decls p in
+
+  let specs = 
+    List.collect (function 
+      | D.Func (ax,n,_,ps,_,_) when A.has "spec" ax -> Some (n, List.map (Option.some << fst) ps)
+      | _ -> None
+    )
+    <| Program.decls p in
+    
+  let inits =
+    List.collect (function 
+      | D.Proc (ax,n,_) when A.has "init" ax -> Some n
+      | _ -> None
+    )
+    <| Program.decls p in
+
+  if inits = [] then 
+    warn "did not find initialization procedures.";
+
+  Program.translate
+    ~new_local_decls: (fun (ax,n,p) ->
+      if List.mem_assoc n methods then [D.var "$myop" T.Int] else []
+    )
+    ~proc_body_prefix: (fun (ax,n,p) -> 
+      if List.mem_assoc n methods then [
+        Ls.call (sprintf "%s.start" <| List.assoc n methods)
+          ~params:(List.map (E.ident << fst) <| Procedure.params p)
+          ~returns:["$myop"]
+      ] else if A.has "entrypoint" ax || n = "main" then
+        List.map Ls.call inits
+      else []
+    )
+    ~proc_before_return: (fun (ax,n,p) ->
+      if List.mem_assoc n methods then [
+        Ls.call (sprintf "%s.finish" <| List.assoc n methods)
+          ~params:(E.ident "$myop" :: List.map (E.ident << fst) (Procedure.returns p))
+      ]
+      else []
+    )
+    ~per_stmt_map: (fun (ax,n,p) s ->
+      match s with
+      | _, S.Assert (ax,_) when A.has "spec" ax -> begin
+        match A.get "spec" ax with
+        | [Right a] -> 
+          if List.mem_assoc a specs then 
+            s :: Ls.assert_ (E.fn a << List.map E.ident <| List.assoc a specs) :: []
+          else begin
+            warn "did not find specification function.";
+            s :: []
+          end
+        | _ -> warn "unexpected {:spec ..} attribute."; s :: []
+      end
+      | _ -> s :: []
+    )
+    p
+
+
 (* HACK : inject the {:method} attribute for certain procedure names. *)
 let inject_method_attribute =
   Program.translate
@@ -247,6 +315,6 @@ let instrument_with_method_attributes k p =
 
 	<| p
   
-let instrument k =
+let instrument_barriers k =
   instrument_with_method_attributes k
   << inject_method_attribute

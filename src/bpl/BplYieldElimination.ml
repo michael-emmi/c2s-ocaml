@@ -228,7 +228,7 @@ let delay_bounding rounds delays pgm =
     		| s -> s :: []
       
       )
-			~per_expr_map: (const vectorize_expr)
+			~per_expr_map: (fun d -> if D.kind d == D.P then vectorize_expr else id)
       
     (* Prevent bodiless procedures from possibly yielding. *)
     << Program.translate

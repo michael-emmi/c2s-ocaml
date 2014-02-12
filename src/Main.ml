@@ -96,9 +96,17 @@ let rec commands : command list = [
     | _ -> assert false
   );
   
-  "violin-instrument", ("linearizability-to-reachability translation", [I 0],
+  "violin", ("linearizability-to-reachability translation", [],
+  function [] ->
+    BplViolin.instrument
+    (* << BplIdentifyEntryPoints.identify_entry_points *)
+    (* << BplCompleteReturnAssignments.complete_returns *)
+    | _ -> assert false
+  );
+  
+  "violin-barriers", ("linearizability-to-reachability translation", [I 0],
   function [I barriers] ->
-    BplViolin.instrument barriers
+    BplViolin.instrument_barriers barriers
     << BplIdentifyEntryPoints.identify_entry_points
     << BplCompleteReturnAssignments.complete_returns
     | _ -> assert false

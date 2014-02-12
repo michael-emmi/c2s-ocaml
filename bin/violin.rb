@@ -11,25 +11,44 @@ module Violin
 
   def options(opts)
   
-    @barriers = 0
+    @barriers = nil
 
     opts.separator ""
     opts.separator "Encoding options:"
   
-    opts.on("-b", "--barriers NUM", Integer, "The barrier bound (default 0)") do |k|
+    opts.on("-b", "--barriers NUM", Integer, "The barrier bound (default nil)") do |k|
       @barriers = k
     end
+    
+  end
+  
+  def po_instrumentation(src)
+    seq = "#{File.basename(src,'.bpl')}.VIOLIN.bpl"
+    puts "* c2s/LIN: #{src} => #{seq.blue}" unless @quiet
+    cmd = "#{c2s} load #{src} violin print #{seq}"
+    puts cmd if @verbose
+    err "could not instrument." unless system(cmd)
+    return seq
   end
 
-  def instrumentation(src)
+  def barrier_instrumentation(src)
     seq = "#{File.basename(src,'.bpl')}.VIOLIN.#{@barriers}.bpl"
     puts "* c2s/LIN: #{src} => #{seq.blue}" unless @quiet
     cmd = "#{c2s()} load #{src} " \
-      "violin-instrument #{@barriers} " \
+      "violin-barriers #{@barriers} " \
       "print #{seq}"
     puts cmd if @verbose
     err "could not instrument." unless system(cmd)
-    return seq  end  
+    return seq
+  end
+  
+  def instrumentation(src)
+    if @barriers then
+      barrier_instrumentation(src)
+    else
+      po_instrumentation(src)
+    end
+  end
 end
 
 if __FILE__ == $0 then
@@ -46,8 +65,10 @@ if __FILE__ == $0 then
     ARGV.each do |src|
       err "Source file '#{src}' does not exist." unless File.exists?(src)
     end
-  
-    tempfile( src = translate(ARGV) )
+
+    # tempfile( src = translate(ARGV) )
+    src = ARGV.first
+
     tempfile( src = instrumentation(src) )
     tempfile( seq = sequentialize(src) )
     verify(seq)
