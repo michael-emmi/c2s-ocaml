@@ -145,12 +145,25 @@ let delay_bounding rounds delays pgm =
       | d -> d )
       
     (* For procedures without bodies, add an ensures clause which says the
-     * value of the round-index variable is invariant. *)
+     * value of the round-index variable is invariant, and another clause
+     * which says that a modified variable is not changed in other rounds. *)
     << List.map (function
       | D.Proc (ax,n,(tx,ps,rs,sx,None)) when List.mem (round_idx,T.Int) rs ->
-        D.Proc (ax,n,(tx,ps,rs,sx@[Sp.ensures (round_idx $=$ init_round_idx)],None))
+        
+        let extra_ensures =
+          (Sp.ensures (round_idx $=$ init_round_idx))
+          :: (List.map (fun g -> 
+            let e = E.sel (E.ident g) [E.ident "k"] in
+            Sp.ensures (E.forall ["k", T.Int]
+              ((E.ident "k" |!=| E.ident round_idx) |=>| (e |=| E.Old e))))
+            << List.flatten 
+            << List.map (function Sp.Modifies (_,_,xs) -> xs | _ -> []) 
+            <| sx)
+        in
+        
+        D.Proc (ax,n,(tx,ps,rs,sx@extra_ensures,None))
       | d -> d )
-    
+
     (* Yield elimination / vectorization step. *)
 
 		<< Program.translate
