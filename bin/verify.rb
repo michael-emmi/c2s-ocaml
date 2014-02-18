@@ -54,6 +54,7 @@ module Verifier
       @boogie_opts << "/stratifiedInline:2"
       @boogie_opts << "/extractLoops"
       @boogie_opts << "/recursionBound:#{@unroll}" if @unroll
+      @boogie_opts << "/weakArrayTheory"
       @boogie_opts << "/siVerbose:1" if @verbose
 
     when :boogie_fi
