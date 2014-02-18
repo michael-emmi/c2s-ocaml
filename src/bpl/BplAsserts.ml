@@ -45,7 +45,7 @@ let asserts_to_error_flag ?(no_asserts = false) pgm =
     (* Replace asserts with error-flag assignments. *)
     ~per_stmt_map: (fun n s -> 
       match s with
-      | ls, S.Assert ([],e) ->
+      | ls, S.Assert (_,e) ->
         Ls.add_labels ls [E.ident err_flag |:=| (E.ident err_flag ||| (E.negate e))]
       | _ -> [s] 
     )
