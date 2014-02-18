@@ -11,6 +11,7 @@ module Verifier
 
     @verifier = :boogie_si
     @timeout = nil
+    @unroll = nil
     @boogie_opts = []
     @graph = false
     
@@ -26,14 +27,10 @@ module Verifier
       @boogie_opts << "/timeLimit:#{t}"
     end
 
-    opts.on("-b", "--recursion-bound MAX", Integer, "The recursion bound (default -)") do |r|
-      @boogie_opts << "/recursionBound:#{r}"
+    opts.on("-u", "--unroll MAX", Integer, "The loop-unroll/recursion bound (default -)") do |u|
+      @unroll = u
     end
-
-    opts.on("-l", "--loop-unroll NUM", Integer, "The loop unrolling (default -)") do |n|
-      @boogie_opts << "/loopUnroll:#{n}"
-    end
-  
+    
     opts.on("-g", "--graph-of-trace", "generate a trace graph") do |g|
       @graph = g
     end
@@ -49,18 +46,18 @@ module Verifier
   def verify(src)
     puts "* Boogie: #{src}" unless @quiet
     
+    warn "without specifying an unroll bound, Boogie may not terminate" \
+      unless @unroll
+    
     case @verifier
     when :boogie_si
-      warn "without specifying a /recursionBound, Boogie might not terminate." \
-        unless @boogie_opts.index{|o| o =~ /\/recursionBound/}
-          
       @boogie_opts << "/stratifiedInline:2"
       @boogie_opts << "/extractLoops"
+      @boogie_opts << "/recursionBound:#{@unroll}" if @unroll
       @boogie_opts << "/siVerbose:1" if @verbose
 
     when :boogie_fi
-      warn "without specifying a /loopUnroll, Boogie might be imprecise." \
-        unless @boogie_opts.index{|o| o =~ /\/loopUnroll/}
+      @boogie_opts << "/loopUnroll:#{@unroll}" if @unroll
 
     else
       err "invalid back-end: #{@verifier}"
