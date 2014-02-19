@@ -105,6 +105,11 @@ let async_to_seq pgm =
             print_val seq_idx_local 
           ])
           
+      ~new_proc_mods: (fun (_,_,(_,_,_,_,body)) -> 
+        match body with
+        | Some _ -> seq_idx :: List.map D.name (next_decls @ guess_decls)
+        | _ -> [])
+      
 			~new_proc_params: 
         (fun (ax,_,_) -> 
           if A.has M.leavealone ax || A.has M.entrypoint ax then [] 

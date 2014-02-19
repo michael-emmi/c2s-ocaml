@@ -29,13 +29,13 @@ let ensure_si_procedures p =
   
 let for_boogie_si =
   check_for_assertions
-  << (fun p -> Program.map_procs (ProcedureExt.fix_modifies p) p)
+  (* << (fun p -> Program.map_procs (ProcedureExt.fix_modifies p) p) *)
   << BplAsserts.asserts_to_error_flag ~no_asserts:true
   << BplCompleteReturnAssignments.complete_returns
   << ensure_si_procedures
   
 let for_boogie_fi =
   Program.add_inline_attribute ~ignore_attrs: ["entrypoint"; "leavealone"]
-  << (fun p -> Program.map_procs (ProcedureExt.fix_modifies p) p)	
+  (* << (fun p -> Program.map_procs (ProcedureExt.fix_modifies p) p)   *)
   << BplAsserts.asserts_to_error_flag ~no_asserts:false
   << ensure_si_procedures

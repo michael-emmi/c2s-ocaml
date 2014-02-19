@@ -30,6 +30,11 @@ let eliminate_wait pgm =
         :: D.var done_var (T.map [T.Int] T.Bool)
         :: D.var unique_id_var T.Int :: [] )
         
+    ~new_proc_mods: (fun (_,_,(_,_,_,_,body)) -> 
+        match body with
+        | Some _ -> [result_var; done_var; unique_id_var]
+        | _ -> [])
+        
 		~new_proc_params: 
       (fun (ax,_,_) -> 
         if A.has M.leavealone ax then [] 

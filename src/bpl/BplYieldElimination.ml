@@ -180,6 +180,11 @@ let delay_bounding rounds delays pgm =
         :: List.map (D.to_const << D.rename init << vectorize_var_decl) gs_decls))
 
 			~replace_global_decls: (fun d -> vectorize_var_decl d :: [])
+      
+      ~new_proc_mods: (fun (_,_,(_,_,_,_,body)) -> 
+        match body with
+        | Some _ -> [delays_var; ignore_round_idx]
+        | _ -> [])
 
 			~new_proc_params: 
         (fun (ax,n,_) -> 

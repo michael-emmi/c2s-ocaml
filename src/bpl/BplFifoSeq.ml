@@ -260,7 +260,11 @@ let phase_bounding_simple phase_bound delay_bound p =
           D.var shift_var (T.map [T.t "pid"] (T.map [T.Int] Type.Int)) ;
           D.var init_shift_var (T.map [T.t "pid"] (T.map [T.Int] Type.Int)) ;
         ] else [] )
-        
+
+      ~new_proc_mods: (fun (_,_,(_,_,_,_,body)) -> 
+        match body with
+        | Some _ -> [delay_var; shift_var; init_shift_var]
+        | _ -> [])
 			~new_proc_params: (const [phase_var, T.Int])
       ~new_local_decls: (const (gvar_decls @ [ D.var vphase_var Type.Int ])) 
 			~proc_body_prefix: (const proc_begin_stmts)

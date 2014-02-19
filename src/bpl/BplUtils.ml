@@ -304,6 +304,7 @@ and ProgramExt : sig
     ?replace_global_decls: (Declaration.t -> Declaration.t list) ->
     ?prepend_global_decls: Declaration.t list ->
     ?append_global_decls: Declaration.t list ->
+    ?new_proc_mods: (proc_ctx -> Identifier.t list) ->
     ?new_proc_params: (proc_ctx -> (Identifier.t * Type.t) list) ->
     ?new_proc_rets: (proc_ctx -> (Identifier.t * Type.t) list) ->
     ?new_local_decls: (proc_ctx -> Declaration.t list) ->
@@ -360,6 +361,7 @@ end = struct
 		?(replace_global_decls = List.unit)
 		?(prepend_global_decls = [])
 		?(append_global_decls = [])
+		?(new_proc_mods = const [])
 		?(new_proc_params = const [])
 		?(new_proc_rets = const [])
 		?(new_local_decls = const [])
@@ -381,6 +383,7 @@ end = struct
       when not (ignore ax) ->
 				let ps' = ps @ new_proc_params (ax,n,p)
 				and rs' = rs @ new_proc_rets (ax,n,p)
+        and es' = es @ (List.map (Specification.modifies << List.unit) (new_proc_mods (ax,n,p)))
 
         and bd' = Option.map (fun (ds,ss) ->          
 				  ((List.flatten 
@@ -400,7 +403,7 @@ end = struct
               | _ -> (), [s] )
             () <| ss 
         ) bd
-				in Declaration.Proc (ax,n,(ts,ps',rs',es,bd')) :: []
+				in Declaration.Proc (ax,n,(ts,ps',rs',es',bd')) :: []
 			| d -> d :: [] )
       
 		<< List.flatten 

@@ -27,7 +27,11 @@ let asserts_to_error_flag ?(no_asserts = false) pgm =
 
     (* Add an error flag. *)
     ~prepend_global_decls:[ D.var err_flag T.Bool ]
-  
+    ~new_proc_mods: (fun (_,_,(_,_,_,_,body)) -> 
+        match body with
+        | Some _ -> [err_flag]
+        | _ -> [])
+
     (* Initialize the error flag to false. *)
     ~proc_body_prefix: (fun (ax,_,_) -> 
       if A.has "entrypoint" ax

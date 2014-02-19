@@ -23,6 +23,7 @@ module M = BplMarkers
 let wrap_entrypoint_procedures pgm = 
   
   let entrypoints = List.filter (D.has M.entrypoint) (Program.procs pgm) in
+  let gs = List.map D.name << List.filter ((=) D.V << D.kind) <| Program.decls pgm in
 
   Program.translate
     ~append_global_decls:(List.map ( 
@@ -32,6 +33,7 @@ let wrap_entrypoint_procedures pgm =
 
         D.proc (sprintf "#Top.%s" n)
           ~attrs:[ A.unit M.entrypoint ]
+          ~spec:[ Sp.modifies gs ]
           ~decls:(List.map (uncurry D.var) (args @ rets))
           ~body:(
             [ Ls.skip ~attrs:[A.unit M.begin_seq] () ]

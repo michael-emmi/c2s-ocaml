@@ -125,6 +125,11 @@ let async_to_seq pgm =
         (D.var seq_idx T.Int :: next_decls)
         
       ~append_global_decls: async_decls
+      
+      ~new_proc_mods: (fun (_,_,(_,_,_,_,body)) -> 
+        match body with
+        | Some _ -> seq_idx :: List.map D.name next_decls
+        | _ -> [])
 
 			~proc_body_prefix: 
         (fun (ax,_,_) -> 
