@@ -72,7 +72,7 @@ module Clang2Bpl
       tempfile( bc = "#{File.basename(src,File.extname(src))}.bc" )
       puts "* Clang: #{src} => #{bc.light_blue}" unless @quiet
       cmd = "#{clang()} #{@clang_opts * " "} -g -c #{src} -emit-llvm -o #{bc}"
-      puts cmd if @verbose
+      puts cmd.bold if @verbose
       err "failed to compile #{src}." unless system(cmd)
     end
 
@@ -81,7 +81,7 @@ module Clang2Bpl
     if llvmbcs.length > 1 then
       puts "* link: #{llvmbcs * ", "} => #{bc.light_blue}" unless @quiet
       cmd = "#{llvmlink()} -o #{bc} #{llvmbcs * " "}"
-      puts cmd if @verbose
+      puts cmd.bold if @verbose
       err "failed to link #{llvmbcs * ", "}." unless system(cmd)
       tempfile(bc)
     end
@@ -89,7 +89,7 @@ module Clang2Bpl
     # 3. translate the bytecode to Boogie
     puts "* SMACK: #{bc} => #{bpl.blue}" unless @quiet
     cmd = "#{smack()} #{@smack_opts * " "} #{bc} -o #{bpl}"
-    puts cmd if @verbose
+    puts cmd.bold if @verbose
     err "failed to translate bytecode to Boogie." unless system(cmd)
 
     return bpl

@@ -381,9 +381,15 @@ end = struct
 		<< List.flatten << map (
 			function Declaration.Proc (ax,n,((ts,ps,rs,es,bd) as p))
       when not (ignore ax) ->
+        let ms = 
+          List.flatten 
+          << List.map (function Specification.Modifies (_,_,ms) -> ms | _ -> []) 
+          <| es in
+        let new_ms = List.remove_all ms <| new_proc_mods (ax,n,p) in
+
 				let ps' = ps @ new_proc_params (ax,n,p)
 				and rs' = rs @ new_proc_rets (ax,n,p)
-        and es' = es @ (List.map (Specification.modifies << List.unit) (new_proc_mods (ax,n,p)))
+        and es' = es @ if new_ms = [] then [] else [Specification.modifies new_ms]
 
         and bd' = Option.map (fun (ds,ss) ->          
 				  ((List.flatten 

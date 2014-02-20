@@ -35,6 +35,8 @@ let instrument p =
       | _ -> None
     )
     <| Program.decls p in
+    
+  let monitor_globals = ["N"; "C"; "A"; "R"; "W"] in
 
   if inits = [] then 
     warn "did not find initialization procedures.";
@@ -59,6 +61,12 @@ let instrument p =
       ]
       else []
     )
+    
+    ~new_proc_mods: (fun (_,_,(_,_,_,_,body)) -> 
+      match body with
+      | Some _ -> monitor_globals
+      | _ -> [])
+
     ~per_stmt_map: (fun (ax,n,p) s ->
       match s with
       | _, S.Assert (ax,_) when A.has "spec" ax -> begin

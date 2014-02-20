@@ -64,7 +64,7 @@ module BoogieTraceParser
       print "generating graph: #{dotfile.abbreviate(40)}\r" if dotfiles.size > 1
       svgfiles << File.basename(dotfile,".dot") + ".svg"
       cmd = "#{dot} -Tsvg #{dotfile} -o#{svgfiles.last}"
-      puts cmd if @verbose
+      puts cmd.bold if @verbose
       err "could not generate SVG image" unless system(cmd)
     end
     

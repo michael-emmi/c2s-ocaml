@@ -68,7 +68,7 @@ module Verifier
     @boogie_opts << "/errorTrace:2"
 
     cmd = "#{boogie()} #{src} #{@boogie_opts * " "}"
-    puts cmd if @verbose
+    puts cmd.bold if @verbose
     t = Time.now
     
     output = task do

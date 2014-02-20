@@ -39,7 +39,7 @@ module DelayBounding
       "prepare #{@verifier} " \
       "strip-internal-markers " \
       "print #{seq}"
-    puts cmd if @verbose
+    puts cmd.bold if @verbose
     err "could not translate." unless system(cmd)
     return seq
   end

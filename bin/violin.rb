@@ -26,7 +26,7 @@ module Violin
     seq = "#{File.basename(src,'.bpl')}.VIOLIN.bpl"
     puts "* c2s/LIN: #{src} => #{seq.blue}" unless @quiet
     cmd = "#{c2s} load #{src} violin print #{seq}"
-    puts cmd if @verbose
+    puts cmd.bold if @verbose
     err "could not instrument." unless system(cmd)
     return seq
   end
@@ -37,7 +37,7 @@ module Violin
     cmd = "#{c2s()} load #{src} " \
       "violin-barriers #{@barriers} " \
       "print #{seq}"
-    puts cmd if @verbose
+    puts.bold cmd if @verbose
     err "could not instrument." unless system(cmd)
     return seq
   end
