@@ -70,7 +70,7 @@ let async_to_seq pgm =
           begin
             try let (_,ps,rs,_,_) = Pg.find_proc n pgm in (n,(ps,rs))::cs
             with Not_found -> 
-              warn "Cannot resolve call to procedure `%s'." n;
+              warn (sprintf "Cannot resolve call to procedure `%s'." n);
               cs
           end
         | _ -> cs) [] pgm
@@ -112,7 +112,7 @@ let async_to_seq pgm =
 				(fun _ -> function
 				   | ls, S.Call (ax,n,ps,rs) when A.has M.async ax ->
 						if rs <> [] then
-							warn "Found async call (to procedure `%s') with assignments." n;
+							warn (sprintf "Found async call (to procedure `%s') with assignments." n);
 					 	(ls, S.Call (A.strip M.async ax,n,ps,rs))::[]
 				   | s -> s :: [])
 		pgm
@@ -158,7 +158,7 @@ let async_to_seq pgm =
 
     		| ls, S.Call (ax,n,ps,rs) when A.has M.async ax ->
     			if rs <> [] then
-    				warn "Found async call (to procedure `%s') with assignments." n;
+    				warn (sprintf "Found async call (to procedure `%s') with assignments." n);
 
     			Ls.add_labels ls (
             (* Map global variables in argument expressions 

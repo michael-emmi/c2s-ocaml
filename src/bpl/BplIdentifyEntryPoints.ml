@@ -16,20 +16,20 @@ let identify_entry_points pgm =
   | _::_ -> pgm
   
   | [] -> begin
-    warn "No {:%s} procedures found; looking for defaults.." 
-      M.entrypoint;
+    warn (sprintf "No {:%s} procedures found; looking for defaults.." 
+      M.entrypoint);
     match 
       List.map (D.name) 
       << List.filter (fun d -> List.mem (D.name d) default_entry_points) 
       <| Program.procs pgm
     with
     | [] ->
-      warn "No default entry points found (among %s)."
-        (String.concat ", " default_entry_points);
+      warn << sprintf "No default entry points found (among %s)."
+        <| (String.concat ", " default_entry_points);
       pgm
 
     | eps -> 
-      warn "Using '%s' as default entry point(s)." (String.concat ", " eps);
+      warn << sprintf "Using '%s' as default entry point(s)." <| (String.concat ", " eps);
       Program.translate
         ~replace_global_decls:(function
           | D.Proc (ax,name,p) when List.mem name eps ->

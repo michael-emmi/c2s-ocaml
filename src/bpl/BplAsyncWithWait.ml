@@ -83,7 +83,7 @@ let async_to_seq pgm =
 				(fun _ -> function
 				   | ls, S.Call (ax,n,ps,rs) when A.has M.async ax ->
 						if rs <> [] then
-							warn "Found async call (to procedure `%s') with assignments." n;
+							warn (sprintf "Found async call (to procedure `%s') with assignments." n);
 					 	(ls, S.Call (A.strip M.async ax,n,ps,rs))::[]
 				   | s -> s :: [])
 		pgm
@@ -136,7 +136,7 @@ let async_to_seq pgm =
 
     		| ls, S.Call (ax,n,ps,rs) when A.has M.async ax -> begin
           (* if rs <> [] then
-            warn "Found async call (to procedure `%s') with assignments." n; *)
+            warn (sprintf "Found async call (to procedure `%s') with assignments." n); *)
             
           match A.get M.async ax with
           | Left t :: [] ->

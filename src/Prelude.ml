@@ -38,7 +38,14 @@ let fresh_int_fn () =
   let cur = ref 0 in
   fun () -> incr cur; !cur
 
-let warn fmt = Printf.eprintf ("Warning: " ^^ fmt ^^ "\n")
+let warnings = ref ([]: string list)
+let warn str =
+  if not (List.mem str !warnings) then begin
+    warnings := str :: !warnings;
+    prerr_string str;
+    prerr_newline ()
+  end
+
 let info fmt = Printf.eprintf ("Info: " ^^ fmt ^^ "\n")
 let error fmt = Printf.eprintf ("Error: " ^^ fmt ^^ "\n")
 

@@ -201,11 +201,11 @@ end = struct
         else if List.length xs > 0 then
           failwith (sprintf "Unmatched return assignment for `%s'." n)
         else begin
-          warn "Missing return assignments for `%s'; attempting to add them." n;
+          warn (sprintf "Missing return assignments for `%s'; attempting to add them." n);
           [ ls, Statement.Call (ax,n,es,List.mapi ignore_var_name ts) ]
         end
       with Not_found -> begin
-        warn "Unable to resolve procedure `%s'." n; 
+        warn (sprintf "Unable to resolve procedure `%s'." n); 
         [s]
       end
     end
